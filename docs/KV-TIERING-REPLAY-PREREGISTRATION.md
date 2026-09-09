@@ -16,6 +16,10 @@ KVLab must consume versioned interfaces rather than copy their implementation.
 
 Recent mixed-format paged-KV work, including *Minima-KV: Retention-Preserving KV Cache Compression with Mixed-Format Paged Attention* (Kozyrev & Maiboroda, arXiv:2608.23834, 2026-08-24), motivates testing retention-preserving tiering against irreversible eviction under matched memory budgets. Its reported results are prior art only and are not evidence for Memorithm.
 
+*QEvict: Recoverable Quantized KV Eviction for Attention-Drift-Robust Long-Context Decoding* (Garg et al., arXiv:2608.05326, 2026-08-05) motivates explicitly measuring whether previously low-importance state becomes important later. Its `Future Missed Mass` and `Global LIR` diagnostics are candidate reactivation metrics only; their exact Memorithm definitions and oracle requirements must be frozen on Development before use.
+
+*Random Attention: Rethinking KV Cache Eviction for Efficient Reasoning* (Wang et al., arXiv:2609.03430, 2026-09-03) reports that a prompt-protected random per-head eviction control can be competitive with scored eviction on the authors' tested reasoning workloads. KVLab therefore includes a matched random control so a complex selector is not credited merely for structural prompt protection. This external result is not evidence that random eviction will work on Memorithm workloads.
+
 ## Memorithm substrate freeze
 
 Initial FLAT checkpoint/replay semantic reference:
@@ -51,6 +55,9 @@ All arms use the same model artifact, tokenizer/template, prompts, decoding sett
 - **B1 Irreversible eviction:** frozen selection policy removes selected segments permanently.
 - **B2 Recoverable tiering:** the same selection signal moves selected segments to a lower-cost representation that remains addressable and can be promoted again.
 - **B3 Optional quantized-retention ablation:** identical segment selection to B2 but a separately frozen quantization format.
+- **B4 Random eviction control:** protect the same Development-frozen prompt/boundary region as the scored eviction comparison, then evict uniformly at random per attention head from the remaining eligible KV state under the same nominal live-KV budget. Freeze the RNG, seed derivation and eligibility set before Validation.
+
+B4 is a diagnostic control, not a replacement for the primary matched B1/B2 comparison. If B1 or B2 differs from B4 in prompt protection, eligibility, per-head allocation or memory accounting, that difference must be reported rather than attributed to the selection score.
 
 No arm may receive hidden labels or additional context unavailable to another arm.
 
@@ -88,9 +95,13 @@ Primary measurements:
 Reactivation measurements:
 
 - future attention mass assigned to previously demoted/evicted segments when an oracle is available;
+- a Development-frozen `Future Missed Mass` analogue measuring future full-cache attention assigned to state that an arm made unavailable;
+- a Development-frozen `Global LIR` analogue measuring reactivation of previously low-importance regions, with the exact inactivity/reactivation thresholds and aggregation rule fixed before Validation;
 - promotion count and promotion latency;
 - quality delta attributable to restoring one selected segment or segment set using paired replay;
 - false-retention and false-eviction rates under a Development-frozen relevance definition.
+
+The QEvict-named analogues above may be used only when the full-cache attention oracle required by their frozen definitions is causally and technically available. Otherwise they are reported as unavailable rather than approximated post hoc.
 
 No single metric may erase the quality/memory/latency trade-off.
 
@@ -111,6 +122,8 @@ Metadata-only FLAT checkpoints must not be misdescribed as physical snapshots. A
 ## Required baselines and fairness
 
 B1 and B2 must use the same selection signal and nominal memory budget for the primary comparison. If B2 pays extra compute, transfer, storage or metadata cost, that cost is reported rather than hidden.
+
+B4 must use the same protected prompt/boundary region, per-head eligibility surface and nominal live-KV budget as the scored eviction control it diagnoses. Its seed policy is frozen on Development and reused without retuning on Validation. If a scored policy fails to outperform this matched random control, that negative result is retained and the score is not credited with value unsupported by the experiment.
 
 The full-cache oracle is a correctness/quality reference, not a deployability claim.
 
@@ -141,4 +154,6 @@ This preregistration does not claim that:
 - attention mass is a universal measure of causal importance;
 - quantized KV is equivalent to full precision;
 - a FLAT logical checkpoint is a physical K/V snapshot;
+- random eviction universally matches scored eviction;
+- QEvict's reactivation metrics transfer unchanged to Memorithm workloads;
 - any external paper result transfers to Memorithm without independent validation.
