@@ -1,2 +1,2 @@
 # KVLab
-Experimental Laboratory for KV-Cache Mechanics, Manipulation and Causal Analysis
+Experimental Laboratory for KV-State Representation, Manipulation, Transfer and Causal Analysis
