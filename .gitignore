@@ -1,0 +1,16 @@
+/target/
+.DS_Store
+*.profraw
+*.profdata
+
+# Local experiment scratch space
+/.kvlab/
+/tmp/
+
+# Large local model/cache payloads must stay out of Git.
+/models/
+/cache-artifacts/
+*.safetensors
+*.gguf
+*.pt
+*.pth
