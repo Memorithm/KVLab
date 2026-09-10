@@ -32,6 +32,25 @@ class BudgetComparison:
 
         return {evaluation.policy: evaluation for evaluation in self.evaluations}
 
+    def best_output_l2_delta(self) -> float:
+        """Return the smallest synthetic full-cache output error in the table."""
+
+        return min(evaluation.output_l2_delta for evaluation in self.evaluations)
+
+    def regret_by_policy(self) -> dict[str, float]:
+        """Return each policy's excess output error over the best compared policy.
+
+        This is an in-table, budget-matched calibration regret. It is not regret
+        against an oracle with privileged future information and must not be
+        interpreted as evidence for C1 outside the synthetic fixture.
+        """
+
+        best = self.best_output_l2_delta()
+        return {
+            evaluation.policy: max(0.0, evaluation.output_l2_delta - best)
+            for evaluation in self.evaluations
+        }
+
 
 def compare_budget_selections(
     trace: SyntheticKvTrace,
