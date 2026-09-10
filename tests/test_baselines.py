@@ -1,6 +1,11 @@
 import unittest
 
-from kvlab.baselines import select_lru_baseline, select_random_baseline
+from kvlab.baselines import (
+    select_lru_baseline,
+    select_magnitude_baseline,
+    select_random_baseline,
+    select_sensitivity_per_byte_baseline,
+)
 from kvlab.synthetic_trace import KvRegion, SyntheticKvTrace
 
 
@@ -26,6 +31,37 @@ class BudgetBaselineTests(unittest.TestCase):
         second = select_random_baseline(self.trace, 8, seed=7)
         self.assertEqual(first, second)
         self.assertLessEqual(first.retained_bytes, 8)
+
+    def test_magnitude_prefers_larger_contribution_norm(self) -> None:
+        result = select_magnitude_baseline(self.trace, 8)
+        self.assertEqual(result.retained_region_ids, ("old", "new"))
+        self.assertEqual(result.retained_bytes, 8)
+        self.assertEqual(result.policy, "magnitude")
+
+    def test_sensitivity_per_byte_accounts_for_storage_cost(self) -> None:
+        trace = SyntheticKvTrace(
+            trace_id="sensitivity-fixture",
+            regions=(
+                KvRegion("large", 8, (3.0, 0.0)),
+                KvRegion("efficient", 4, (2.0, 0.0)),
+                KvRegion("small", 4, (1.0, 0.0)),
+            ),
+        )
+        result = select_sensitivity_per_byte_baseline(trace, 8)
+        self.assertEqual(result.retained_region_ids, ("efficient", "small"))
+        self.assertEqual(result.retained_bytes, 8)
+        self.assertEqual(result.policy, "synthetic_sensitivity_per_byte")
+
+    def test_ranked_ties_preserve_trace_order(self) -> None:
+        trace = SyntheticKvTrace(
+            trace_id="tie-fixture",
+            regions=(
+                KvRegion("first", 4, (1.0, 0.0)),
+                KvRegion("second", 4, (0.0, 1.0)),
+            ),
+        )
+        result = select_magnitude_baseline(trace, 4)
+        self.assertEqual(result.retained_region_ids, ("first",))
 
     def test_budget_above_full_cache_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
