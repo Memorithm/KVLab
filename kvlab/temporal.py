@@ -9,6 +9,7 @@ claim about real KV caches is encoded here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import combinations
 from math import sqrt
 
 
@@ -85,8 +86,43 @@ class TemporalUtility:
         return self.future_l2_delta_sum / self.storage_bytes
 
 
+@dataclass(frozen=True)
+class TemporalSelection:
+    """Budget-feasible region selection made at one decision step."""
+
+    policy_name: str
+    decision_step: int
+    budget_bytes: int
+    retained_region_ids: tuple[str, ...]
+    retained_bytes: int
+
+
+@dataclass(frozen=True)
+class TemporalRegret:
+    """Offline regret against the exact future-utility oracle."""
+
+    policy_future_utility: float
+    oracle_future_utility: float
+
+    @property
+    def regret(self) -> float:
+        return self.oracle_future_utility - self.policy_future_utility
+
+
 def _l2(values: tuple[float, ...]) -> float:
     return sqrt(sum(value * value for value in values))
+
+
+def _validate_decision_and_budget(
+    trace: TemporalKvTrace,
+    decision_step: int,
+    budget_bytes: int,
+) -> None:
+    if decision_step < 0 or decision_step >= trace.steps:
+        raise IndexError("decision_step outside trace")
+    full_bytes = sum(region.storage_bytes for region in trace.regions)
+    if budget_bytes < 0 or budget_bytes > full_bytes:
+        raise ValueError("budget_bytes must be between zero and full-cache bytes")
 
 
 def evaluate_temporal_utility(
@@ -115,4 +151,114 @@ def evaluate_temporal_utility(
         immediate_l2_delta=immediate,
         future_l2_delta_sum=future,
         storage_bytes=region.storage_bytes,
+    )
+
+
+def select_observed_history_per_byte(
+    trace: TemporalKvTrace,
+    decision_step: int,
+    budget_bytes: int,
+) -> TemporalSelection:
+    """Select using only contributions observable at or before the decision.
+
+    The score is cumulative observed L2 sensitivity per byte. Post-decision
+    contributions are never read by this policy, keeping the future oracle
+    strictly outside the online decision path.
+    """
+
+    _validate_decision_and_budget(trace, decision_step, budget_bytes)
+    scored = []
+    for region in trace.regions:
+        observed = sum(_l2(region.contributions[step]) for step in range(decision_step + 1))
+        scored.append((-(observed / region.storage_bytes), region.region_id, region))
+    scored.sort(key=lambda item: (item[0], item[1]))
+
+    retained: list[str] = []
+    retained_bytes = 0
+    for _, _, region in scored:
+        if retained_bytes + region.storage_bytes <= budget_bytes:
+            retained.append(region.region_id)
+            retained_bytes += region.storage_bytes
+    return TemporalSelection(
+        policy_name="observed_history_per_byte",
+        decision_step=decision_step,
+        budget_bytes=budget_bytes,
+        retained_region_ids=tuple(retained),
+        retained_bytes=retained_bytes,
+    )
+
+
+def select_exact_future_oracle(
+    trace: TemporalKvTrace,
+    decision_step: int,
+    budget_bytes: int,
+) -> TemporalSelection:
+    """Find the exact offline subset maximizing additive future utility.
+
+    This exponential oracle is calibration-only and capped to small synthetic
+    traces. It is not a deployable KV policy and must never be exposed as an
+    online feature source.
+    """
+
+    _validate_decision_and_budget(trace, decision_step, budget_bytes)
+    if len(trace.regions) > 20:
+        raise ValueError("exact future oracle is limited to 20 synthetic regions")
+
+    utilities = {
+        region.region_id: evaluate_temporal_utility(trace, region.region_id, decision_step).future_l2_delta_sum
+        for region in trace.regions
+    }
+    best_ids: tuple[str, ...] = ()
+    best_bytes = 0
+    best_utility = 0.0
+    for size in range(len(trace.regions) + 1):
+        for subset in combinations(trace.regions, size):
+            used = sum(region.storage_bytes for region in subset)
+            if used > budget_bytes:
+                continue
+            ids = tuple(sorted(region.region_id for region in subset))
+            utility = sum(utilities[region.region_id] for region in subset)
+            if utility > best_utility or (utility == best_utility and ids < best_ids):
+                best_ids = ids
+                best_bytes = used
+                best_utility = utility
+    return TemporalSelection(
+        policy_name="exact_future_oracle",
+        decision_step=decision_step,
+        budget_bytes=budget_bytes,
+        retained_region_ids=best_ids,
+        retained_bytes=best_bytes,
+    )
+
+
+def evaluate_temporal_regret(
+    trace: TemporalKvTrace,
+    selection: TemporalSelection,
+) -> TemporalRegret:
+    """Compare one online selection with the exact future oracle offline."""
+
+    _validate_decision_and_budget(trace, selection.decision_step, selection.budget_bytes)
+    region_ids = {region.region_id for region in trace.regions}
+    if len(selection.retained_region_ids) != len(set(selection.retained_region_ids)):
+        raise ValueError("retained_region_ids must be unique")
+    if any(region_id not in region_ids for region_id in selection.retained_region_ids):
+        raise KeyError("selection contains unknown region_id")
+    retained_bytes = sum(
+        region.storage_bytes for region in trace.regions if region.region_id in selection.retained_region_ids
+    )
+    if retained_bytes != selection.retained_bytes or retained_bytes > selection.budget_bytes:
+        raise ValueError("selection byte accounting is inconsistent")
+
+    policy_utility = sum(
+        evaluate_temporal_utility(trace, region_id, selection.decision_step).future_l2_delta_sum
+        for region_id in selection.retained_region_ids
+    )
+    oracle = select_exact_future_oracle(trace, selection.decision_step, selection.budget_bytes)
+    oracle_utility = sum(
+        evaluate_temporal_utility(trace, region_id, selection.decision_step).future_l2_delta_sum
+        for region_id in oracle.retained_region_ids
+    )
+    return TemporalRegret(
+        policy_future_utility=policy_utility,
+        oracle_future_utility=oracle_utility,
     )
