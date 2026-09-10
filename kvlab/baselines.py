@@ -9,9 +9,11 @@ before any real-model C1 experiment is authorized.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import sqrt
 from random import Random
+from typing import Callable
 
-from .synthetic_trace import SyntheticKvTrace
+from .synthetic_trace import KvRegion, SyntheticKvTrace
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,33 @@ def _validate_budget(trace: SyntheticKvTrace, budget_bytes: int) -> None:
         raise ValueError("budget_bytes must be non-negative")
     if budget_bytes > trace.total_storage_bytes:
         raise ValueError("budget_bytes cannot exceed full-cache storage")
+
+
+def _ranked_greedy_selection(
+    trace: SyntheticKvTrace,
+    budget_bytes: int,
+    *,
+    policy: str,
+    score: Callable[[KvRegion], float],
+) -> BudgetSelection:
+    """Pack indivisible regions in descending score order with stable ties."""
+
+    _validate_budget(trace, budget_bytes)
+    ranked = sorted(enumerate(trace.regions), key=lambda item: -score(item[1]))
+    retained: set[int] = set()
+    retained_bytes = 0
+    for index, region in ranked:
+        if retained_bytes + region.storage_bytes <= budget_bytes:
+            retained.add(index)
+            retained_bytes += region.storage_bytes
+    retained_region_ids = tuple(
+        region.region_id for index, region in enumerate(trace.regions) if index in retained
+    )
+    return BudgetSelection(policy, budget_bytes, retained_region_ids, retained_bytes)
+
+
+def _contribution_l2(region: KvRegion) -> float:
+    return sqrt(sum(value * value for value in region.contribution))
 
 
 def select_lru_baseline(trace: SyntheticKvTrace, budget_bytes: int) -> BudgetSelection:
@@ -78,3 +107,38 @@ def select_random_baseline(
         region.region_id for index, region in enumerate(trace.regions) if index in retained
     )
     return BudgetSelection("random", budget_bytes, retained_region_ids, retained_bytes)
+
+
+def select_magnitude_baseline(
+    trace: SyntheticKvTrace,
+    budget_bytes: int,
+) -> BudgetSelection:
+    """Rank synthetic regions by contribution L2 magnitude before byte packing."""
+
+    return _ranked_greedy_selection(
+        trace,
+        budget_bytes,
+        policy="magnitude",
+        score=_contribution_l2,
+    )
+
+
+def select_sensitivity_per_byte_baseline(
+    trace: SyntheticKvTrace,
+    budget_bytes: int,
+) -> BudgetSelection:
+    """Rank by exact synthetic removal sensitivity per stored byte.
+
+    In the additive synthetic oracle, removing one region changes the output by
+    exactly the L2 norm of that region's contribution. Dividing this deterministic
+    fixture quantity by ``storage_bytes`` gives a calibration proxy for C1's
+    recoverability-per-byte idea. It is deliberately named *sensitivity* rather
+    than recoverability because it contains no future-query or model evidence.
+    """
+
+    return _ranked_greedy_selection(
+        trace,
+        budget_bytes,
+        policy="synthetic_sensitivity_per_byte",
+        score=lambda region: _contribution_l2(region) / region.storage_bytes,
+    )
