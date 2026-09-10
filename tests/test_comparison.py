@@ -46,6 +46,32 @@ class BudgetComparisonTests(unittest.TestCase):
             self.assertLessEqual(evaluation.retained_bytes, budget)
             self.assertGreaterEqual(evaluation.output_l2_delta, 0.0)
 
+    def test_reports_budget_matched_regret_relative_to_best_policy(self) -> None:
+        budget = 8
+        comparison = compare_budget_selections(
+            self.trace,
+            (
+                select_lru_baseline(self.trace, budget),
+                select_magnitude_baseline(self.trace, budget),
+                select_sensitivity_per_byte_baseline(self.trace, budget),
+            ),
+        )
+
+        regrets = comparison.regret_by_policy()
+        self.assertEqual(set(regrets), set(comparison.by_policy()))
+        self.assertAlmostEqual(min(regrets.values()), 0.0)
+        self.assertAlmostEqual(
+            comparison.best_output_l2_delta(),
+            min(evaluation.output_l2_delta for evaluation in comparison.evaluations),
+        )
+        for policy, regret in regrets.items():
+            self.assertAlmostEqual(
+                regret,
+                comparison.by_policy()[policy].output_l2_delta
+                - comparison.best_output_l2_delta(),
+            )
+            self.assertGreaterEqual(regret, 0.0)
+
     def test_rejects_mixed_budgets(self) -> None:
         with self.assertRaises(ValueError):
             compare_budget_selections(
