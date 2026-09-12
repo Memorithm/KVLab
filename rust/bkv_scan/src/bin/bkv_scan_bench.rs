@@ -94,13 +94,8 @@ fn run(config: Config) -> Result<(), String> {
         .map(|_| make_signature(&mut state, config.signature_bits))
         .collect::<Vec<_>>();
 
-    let scalar = scan_packed_pages(
-        config.signature_bits,
-        &query,
-        &pages,
-        config.max_distance,
-    )
-    .map_err(|error| format!("scalar oracle failed: {error:?}"))?;
+    let scalar = scan_packed_pages(config.signature_bits, &query, &pages, config.max_distance)
+        .map_err(|error| format!("scalar oracle failed: {error:?}"))?;
     let parallel = scan_packed_pages_parallel(
         config.signature_bits,
         &query,
