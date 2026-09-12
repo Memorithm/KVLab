@@ -8,13 +8,8 @@ use numa_plan::{
 
 #[test]
 fn local_remote_and_interleave_cases_are_representable() {
-    let local = NumaCase::new(
-        "node0-local",
-        vec![0, 2, 4, 6],
-        0,
-        MemoryPlacement::LocalNode(0),
-    )
-    .unwrap();
+    let local = NumaCase::new("node0-local", vec![0, 2, 4, 6], 0, MemoryPlacement::LocalNode(0))
+        .unwrap();
     let remote = NumaCase::new(
         "node0-remote-node1",
         vec![0, 2, 4, 6],
