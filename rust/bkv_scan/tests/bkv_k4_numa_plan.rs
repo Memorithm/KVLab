@@ -2,14 +2,19 @@
 mod numa_plan;
 
 use numa_plan::{
-    MemoryPlacement, NumaCampaignError, NumaCampaignPlan, NumaCase, NumaPlanError,
-    BKV_K4_NUMA_PLAN_SCHEMA_VERSION,
+    BKV_K4_NUMA_PLAN_SCHEMA_VERSION, MemoryPlacement, NumaCampaignError, NumaCampaignPlan,
+    NumaCase, NumaPlanError,
 };
 
 #[test]
 fn local_remote_and_interleave_cases_are_representable() {
-    let local = NumaCase::new("node0-local", vec![0, 2, 4, 6], 0, MemoryPlacement::LocalNode(0))
-        .unwrap();
+    let local = NumaCase::new(
+        "node0-local",
+        vec![0, 2, 4, 6],
+        0,
+        MemoryPlacement::LocalNode(0),
+    )
+    .unwrap();
     let remote = NumaCase::new(
         "node0-remote-node1",
         vec![0, 2, 4, 6],
@@ -42,9 +47,9 @@ fn duplicate_cpu_assignments_fail_closed() {
             "duplicate",
             vec![0, 2, 2, 4],
             0,
-            MemoryPlacement::LocalNode(0)
+            MemoryPlacement::LocalNode(0),
         ),
-        Err(NumaPlanError::DuplicateCpu(2))
+        Err(NumaPlanError::DuplicateCpu(2)),
     );
 }
 
@@ -55,12 +60,12 @@ fn local_memory_must_match_declared_worker_node() {
             "bad-local",
             vec![1, 3],
             1,
-            MemoryPlacement::LocalNode(0)
+            MemoryPlacement::LocalNode(0),
         ),
         Err(NumaPlanError::NodeMismatch {
             cpu_node: 1,
             placement_node: 0,
-        })
+        }),
     );
 }
 
@@ -69,19 +74,19 @@ fn campaign_requires_evidence_commit_and_unique_case_names() {
     let case = NumaCase::new("local", vec![0], 0, MemoryPlacement::LocalNode(0)).unwrap();
     assert_eq!(
         NumaCampaignPlan::new("", "commit", vec![case.clone()]),
-        Err(NumaCampaignError::MissingHostEvidence)
+        Err(NumaCampaignError::MissingHostEvidence),
     );
     assert_eq!(
         NumaCampaignPlan::new("evidence", "", vec![case.clone()]),
-        Err(NumaCampaignError::MissingCommitSha)
+        Err(NumaCampaignError::MissingCommitSha),
     );
     assert_eq!(
         NumaCampaignPlan::new("evidence", "commit", vec![]),
-        Err(NumaCampaignError::EmptyCases)
+        Err(NumaCampaignError::EmptyCases),
     );
     assert_eq!(
         NumaCampaignPlan::new("evidence", "commit", vec![case.clone(), case]),
-        Err(NumaCampaignError::DuplicateCaseName("local".to_owned()))
+        Err(NumaCampaignError::DuplicateCaseName("local".to_owned())),
     );
 }
 
