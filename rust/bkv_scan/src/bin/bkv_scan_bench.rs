@@ -80,7 +80,7 @@ fn make_signature(state: &mut u64, signature_bits: usize) -> Vec<u64> {
 fn median_ns(samples: &mut [u128]) -> u128 {
     samples.sort_unstable();
     let middle = samples.len() / 2;
-    if samples.len() % 2 == 0 {
+    if samples.len().is_multiple_of(2) {
         (samples[middle - 1] + samples[middle]) / 2
     } else {
         samples[middle]
