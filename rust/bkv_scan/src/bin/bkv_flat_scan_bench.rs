@@ -138,13 +138,7 @@ fn scan_flat_scalar(
     pages: usize,
     max_distance: usize,
 ) -> Result<Vec<usize>, String> {
-    let words = validate_flat_layout(
-        signature_bits,
-        query,
-        flat_pages,
-        pages,
-        max_distance,
-    )?;
+    let words = validate_flat_layout(signature_bits, query, flat_pages, pages, max_distance)?;
     let mut selected = Vec::new();
     for page_id in 0..pages {
         let start = page_id * words;
@@ -169,13 +163,7 @@ fn scan_flat_parallel(
     max_distance: usize,
     workers: usize,
 ) -> Result<Vec<usize>, String> {
-    let words = validate_flat_layout(
-        signature_bits,
-        query,
-        flat_pages,
-        pages,
-        max_distance,
-    )?;
+    let words = validate_flat_layout(signature_bits, query, flat_pages, pages, max_distance)?;
     if workers == 0 {
         return Err("workers must be non-zero".to_owned());
     }
