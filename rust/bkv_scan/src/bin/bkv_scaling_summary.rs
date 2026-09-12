@@ -4,11 +4,13 @@ use std::env;
 use std::fs;
 use std::process::ExitCode;
 
-const BENCH_SCHEMA: &str = "bkv-k3-v1";
+const BENCH_SCHEMA_PACKED: &str = "bkv-k3-v1";
+const BENCH_SCHEMA_FLAT: &str = "bkv-k3-flat-v1";
 const SUMMARY_SCHEMA: &str = "bkv-k3-scaling-v1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BenchSample {
+    schema: String,
     seed: u64,
     pages: usize,
     signature_bits: usize,
@@ -45,11 +47,12 @@ where
 fn parse_sample(line: &str) -> Result<BenchSample, String> {
     let mut fields = line.split(',');
     let schema = fields.next().ok_or_else(|| "missing schema".to_owned())?;
-    if schema != BENCH_SCHEMA {
+    if !matches!(schema, BENCH_SCHEMA_PACKED | BENCH_SCHEMA_FLAT) {
         return Err(format!("unsupported schema: {schema}"));
     }
 
     let sample = BenchSample {
+        schema: schema.to_owned(),
         seed: parse_field("seed", fields.next())?,
         pages: parse_field("pages", fields.next())?,
         signature_bits: parse_field("signature_bits", fields.next())?,
@@ -79,7 +82,8 @@ fn parse_sample(line: &str) -> Result<BenchSample, String> {
 }
 
 fn same_campaign(left: &BenchSample, right: &BenchSample) -> bool {
-    left.seed == right.seed
+    left.schema == right.schema
+        && left.seed == right.seed
         && left.pages == right.pages
         && left.signature_bits == right.signature_bits
         && left.max_distance == right.max_distance
@@ -181,8 +185,9 @@ fn main() -> ExitCode {
 mod tests {
     use super::*;
 
-    fn sample(workers: usize, median_ns: u128) -> BenchSample {
+    fn sample_with_schema(schema: &str, workers: usize, median_ns: u128) -> BenchSample {
         BenchSample {
+            schema: schema.to_owned(),
             seed: 7,
             pages: 100_000,
             signature_bits: 256,
@@ -198,10 +203,23 @@ mod tests {
         }
     }
 
+    fn sample(workers: usize, median_ns: u128) -> BenchSample {
+        sample_with_schema(BENCH_SCHEMA_PACKED, workers, median_ns)
+    }
+
     #[test]
     fn parses_current_benchmark_schema() {
         let line = "bkv-k3-v1,7,100000,256,96,4,5,25,14453,25600000,300,290,310";
         assert_eq!(parse_sample(line).unwrap(), sample(4, 300));
+    }
+
+    #[test]
+    fn parses_flat_benchmark_schema() {
+        let line = "bkv-k3-flat-v1,7,100000,256,96,4,5,25,14453,25600000,300,290,310";
+        assert_eq!(
+            parse_sample(line).unwrap(),
+            sample_with_schema(BENCH_SCHEMA_FLAT, 4, 300)
+        );
     }
 
     #[test]
@@ -221,6 +239,14 @@ mod tests {
         let mut drifted = sample(2, 500);
         drifted.seed = 8;
         assert!(summarize(&[sample(1, 1_000), drifted])
+            .unwrap_err()
+            .contains("same deterministic benchmark campaign"));
+    }
+
+    #[test]
+    fn rejects_storage_schema_mixing() {
+        let flat = sample_with_schema(BENCH_SCHEMA_FLAT, 2, 500);
+        assert!(summarize(&[sample(1, 1_000), flat])
             .unwrap_err()
             .contains("same deterministic benchmark campaign"));
     }
