@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 from .instrumentation import KVResourceAccounting, MeasurementKind
 
@@ -124,3 +125,39 @@ class QuantizationAccountingComparison:
             return None
         assert source.value is not None and target.value is not None
         return source.value - target.value
+
+
+class ReconstructionMetric(str, Enum):
+    RMSE = "rmse"
+    MAX_ABS_ERROR = "max_abs_error"
+    RELATIVE_L2_ERROR = "relative_l2_error"
+
+
+@dataclass(frozen=True, slots=True)
+class QuantizationQualityObservation:
+    """One reconstruction-quality observation with explicit provenance.
+
+    This record stores an observed or estimated error. It deliberately contains
+    no pass/fail threshold and therefore cannot itself satisfy a preregistered
+    scientific decision rule or justify a claim about downstream model quality.
+    """
+
+    metric: ReconstructionMetric
+    value: float | None
+    kind: MeasurementKind
+
+    def __post_init__(self) -> None:
+        if self.kind is MeasurementKind.NOT_EXPOSED:
+            if self.value is not None:
+                raise ValueError("not_exposed quality observations must not carry a value")
+            return
+        if self.value is None or not math.isfinite(self.value) or self.value < 0.0:
+            raise ValueError(
+                "measured/estimated quality observations require a finite non-negative value"
+            )
+
+    @property
+    def measured_value(self) -> float | None:
+        if self.kind is MeasurementKind.MEASURED:
+            return self.value
+        return None
