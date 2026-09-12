@@ -64,7 +64,9 @@ impl NumaHostEvidence {
 
     #[must_use]
     pub fn contains_node(&self, node: u32) -> bool {
-        self.cpu_to_node.values().any(|candidate| *candidate == node)
+        self.cpu_to_node
+            .values()
+            .any(|candidate| *candidate == node)
     }
 
     pub fn validate_worker_set(
@@ -73,7 +75,9 @@ impl NumaHostEvidence {
         declared_node: u32,
     ) -> Result<(), NumaEvidenceError> {
         for &cpu in worker_cpus {
-            let observed_node = self.node_for_cpu(cpu).ok_or(NumaEvidenceError::UnknownCpu(cpu))?;
+            let observed_node = self
+                .node_for_cpu(cpu)
+                .ok_or(NumaEvidenceError::UnknownCpu(cpu))?;
             if observed_node != declared_node {
                 return Err(NumaEvidenceError::CpuNodeMismatch {
                     cpu,
