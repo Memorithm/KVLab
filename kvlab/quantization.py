@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from .instrumentation import KVResourceAccounting, MeasurementKind
+
 
 class KvRepresentation(str, Enum):
     BF16 = "bf16"
@@ -80,3 +82,45 @@ class BackendQuantizationCapability:
     def require_supported(self, target: KvRepresentation) -> None:
         if target not in self.supported_targets:
             raise ValueError(f"backend {self.backend!r} does not support {target.value}")
+
+
+@dataclass(frozen=True, slots=True)
+class QuantizationAccountingComparison:
+    """Bind theoretical K3 accounting to separately observed source/target resources.
+
+    This object never infers physical savings from representation bit width. GPU
+    residency deltas are exposed only when both arms were actually measured;
+    estimated or unavailable telemetry remains explicit in the input records.
+    """
+
+    config: QuantizationConfig
+    source: KVResourceAccounting
+    target: KVResourceAccounting
+
+    def __post_init__(self) -> None:
+        self.source.validate()
+        self.target.validate()
+
+    @property
+    def theoretical_target_total_bytes_ceiling(self) -> int:
+        return (self.config.theoretical_target_total_bits + 7) // 8
+
+    @property
+    def logical_cache_delta_bytes(self) -> float | None:
+        source = self.source.logical_cache_bytes
+        target = self.target.logical_cache_bytes
+        if source.value is None or target.value is None:
+            return None
+        return source.value - target.value
+
+    @property
+    def measured_gpu_residency_delta_bytes(self) -> float | None:
+        source = self.source.gpu_resident_bytes
+        target = self.target.gpu_resident_bytes
+        if (
+            source.kind is not MeasurementKind.MEASURED
+            or target.kind is not MeasurementKind.MEASURED
+        ):
+            return None
+        assert source.value is not None and target.value is not None
+        return source.value - target.value
