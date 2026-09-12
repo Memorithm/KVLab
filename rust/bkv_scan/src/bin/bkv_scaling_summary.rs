@@ -95,7 +95,10 @@ fn summarize(samples: &[BenchSample]) -> Result<Vec<ScalingPoint>, String> {
     }
 
     let reference = &samples[0];
-    if samples.iter().any(|sample| !same_campaign(reference, sample)) {
+    if samples
+        .iter()
+        .any(|sample| !same_campaign(reference, sample))
+    {
         return Err("samples do not describe the same deterministic benchmark campaign".to_owned());
     }
 
