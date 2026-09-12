@@ -2,8 +2,8 @@
 mod numa_plan;
 
 use numa_plan::{
-    BKV_K4_NUMA_PLAN_SCHEMA_VERSION, MemoryPlacement, NumaCampaignError, NumaCampaignPlan,
-    NumaCase, NumaPlanError,
+    MemoryPlacement, NumaCampaignError, NumaCampaignPlan, NumaCase, NumaPlanError,
+    BKV_K4_NUMA_PLAN_SCHEMA_VERSION,
 };
 
 #[test]
