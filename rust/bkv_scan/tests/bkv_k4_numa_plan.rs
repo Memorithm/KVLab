@@ -8,8 +8,13 @@ use numa_plan::{
 
 #[test]
 fn local_remote_and_interleave_cases_are_representable() {
-    let local = NumaCase::new("node0-local", vec![0, 2, 4, 6], 0, MemoryPlacement::LocalNode(0))
-        .unwrap();
+    let local = NumaCase::new(
+        "node0-local",
+        vec![0, 2, 4, 6],
+        0,
+        MemoryPlacement::LocalNode(0),
+    )
+    .unwrap();
     let remote = NumaCase::new(
         "node0-remote-node1",
         vec![0, 2, 4, 6],
@@ -51,12 +56,7 @@ fn duplicate_cpu_assignments_fail_closed() {
 #[test]
 fn local_memory_must_match_declared_worker_node() {
     assert_eq!(
-        NumaCase::new(
-            "bad-local",
-            vec![1, 3],
-            1,
-            MemoryPlacement::LocalNode(0),
-        ),
+        NumaCase::new("bad-local", vec![1, 3], 1, MemoryPlacement::LocalNode(0),),
         Err(NumaPlanError::NodeMismatch {
             cpu_node: 1,
             placement_node: 0,
