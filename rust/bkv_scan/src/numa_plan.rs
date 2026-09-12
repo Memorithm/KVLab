@@ -35,7 +35,9 @@ impl fmt::Display for NumaPlanError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyCaseName => write!(f, "BKV-K4 NUMA case name must be non-empty"),
-            Self::EmptyWorkerSet => write!(f, "BKV-K4 NUMA case must include at least one worker CPU"),
+            Self::EmptyWorkerSet => {
+                write!(f, "BKV-K4 NUMA case must include at least one worker CPU")
+            }
             Self::DuplicateCpu(cpu) => write!(f, "BKV-K4 NUMA case repeats logical CPU {cpu}"),
             Self::NodeMismatch {
                 cpu_node,
