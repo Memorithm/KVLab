@@ -1,10 +1,34 @@
 import unittest
 
+from kvlab.instrumentation import (
+    KVResourceAccounting,
+    MeasurementKind,
+    bytes_quantity,
+    not_exposed,
+    tokens_quantity,
+)
 from kvlab.quantization import (
     BackendQuantizationCapability,
     KvRepresentation,
+    QuantizationAccountingComparison,
     QuantizationConfig,
 )
+
+
+def accounting(logical: int, gpu: int | None, kind: MeasurementKind) -> KVResourceAccounting:
+    gpu_quantity = not_exposed("bytes") if gpu is None else bytes_quantity(gpu, kind)
+    return KVResourceAccounting(
+        logical_cache_bytes=bytes_quantity(logical, MeasurementKind.MEASURED),
+        gpu_resident_bytes=gpu_quantity,
+        host_resident_bytes=not_exposed("bytes"),
+        secondary_storage_bytes=not_exposed("bytes"),
+        fragmentation_bytes=bytes_quantity(0, MeasurementKind.ESTIMATED),
+        host_to_gpu_bytes=not_exposed("bytes"),
+        gpu_to_host_bytes=not_exposed("bytes"),
+        bytes_read=not_exposed("bytes"),
+        bytes_written=not_exposed("bytes"),
+        recomputed_token_count=tokens_quantity(0, MeasurementKind.ESTIMATED),
+    )
 
 
 class QuantizationContractTests(unittest.TestCase):
@@ -49,6 +73,36 @@ class QuantizationContractTests(unittest.TestCase):
                 1,
                 metadata_bits=-1,
             )
+
+    def test_comparison_keeps_logical_and_measured_gpu_savings_separate(self) -> None:
+        comparison = QuantizationAccountingComparison(
+            config=QuantizationConfig(
+                KvRepresentation.FP16,
+                KvRepresentation.INT4,
+                values=1024,
+                metadata_bits=64,
+            ),
+            source=accounting(2048, 4096, MeasurementKind.MEASURED),
+            target=accounting(520, 1536, MeasurementKind.MEASURED),
+        )
+        self.assertEqual(comparison.theoretical_target_total_bytes_ceiling, 520)
+        self.assertEqual(comparison.logical_cache_delta_bytes, 1528.0)
+        self.assertEqual(comparison.measured_gpu_residency_delta_bytes, 2560.0)
+
+    def test_estimated_or_unavailable_gpu_residency_never_becomes_measured_savings(self) -> None:
+        config = QuantizationConfig(KvRepresentation.FP16, KvRepresentation.INT8, values=64)
+        estimated = QuantizationAccountingComparison(
+            config,
+            accounting(128, 256, MeasurementKind.MEASURED),
+            accounting(64, 128, MeasurementKind.ESTIMATED),
+        )
+        unavailable = QuantizationAccountingComparison(
+            config,
+            accounting(128, 256, MeasurementKind.MEASURED),
+            accounting(64, None, MeasurementKind.NOT_EXPOSED),
+        )
+        self.assertIsNone(estimated.measured_gpu_residency_delta_bytes)
+        self.assertIsNone(unavailable.measured_gpu_residency_delta_bytes)
 
 
 if __name__ == "__main__":
