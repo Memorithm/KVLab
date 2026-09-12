@@ -12,6 +12,8 @@ from kvlab.quantization import (
     KvRepresentation,
     QuantizationAccountingComparison,
     QuantizationConfig,
+    QuantizationQualityObservation,
+    ReconstructionMetric,
 )
 
 
@@ -103,6 +105,40 @@ class QuantizationContractTests(unittest.TestCase):
         )
         self.assertIsNone(estimated.measured_gpu_residency_delta_bytes)
         self.assertIsNone(unavailable.measured_gpu_residency_delta_bytes)
+
+    def test_reconstruction_quality_preserves_measurement_kind(self) -> None:
+        measured = QuantizationQualityObservation(
+            ReconstructionMetric.RMSE,
+            0.0125,
+            MeasurementKind.MEASURED,
+        )
+        estimated = QuantizationQualityObservation(
+            ReconstructionMetric.MAX_ABS_ERROR,
+            0.25,
+            MeasurementKind.ESTIMATED,
+        )
+        unavailable = QuantizationQualityObservation(
+            ReconstructionMetric.RELATIVE_L2_ERROR,
+            None,
+            MeasurementKind.NOT_EXPOSED,
+        )
+        self.assertEqual(measured.measured_value, 0.0125)
+        self.assertIsNone(estimated.measured_value)
+        self.assertIsNone(unavailable.measured_value)
+
+    def test_invalid_quality_observations_fail_closed(self) -> None:
+        with self.assertRaises(ValueError):
+            QuantizationQualityObservation(
+                ReconstructionMetric.RMSE,
+                -1.0,
+                MeasurementKind.MEASURED,
+            )
+        with self.assertRaises(ValueError):
+            QuantizationQualityObservation(
+                ReconstructionMetric.RMSE,
+                0.0,
+                MeasurementKind.NOT_EXPOSED,
+            )
 
 
 if __name__ == "__main__":
