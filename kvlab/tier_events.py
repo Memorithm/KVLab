@@ -21,6 +21,13 @@ class TierMovementKind(str, Enum):
     DEMOTE = "demote"
 
 
+_TIER_RANK = {
+    Tier.SECONDARY: 0,
+    Tier.HOST: 1,
+    Tier.GPU: 2,
+}
+
+
 @dataclass(frozen=True)
 class TierMovementEvent:
     """One runtime-reported movement between two distinct residency tiers."""
@@ -38,6 +45,17 @@ class TierMovementEvent:
             raise ValueError("source and destination tiers must differ")
         if self.bytes_moved <= 0:
             raise ValueError("bytes_moved must be positive")
+
+        expected_kind = (
+            TierMovementKind.PROMOTE
+            if _TIER_RANK[self.destination] > _TIER_RANK[self.source]
+            else TierMovementKind.DEMOTE
+        )
+        if self.kind is not expected_kind:
+            raise ValueError(
+                f"movement kind {self.kind.value} contradicts "
+                f"{self.source.value}->{self.destination.value}"
+            )
 
 
 @dataclass(frozen=True)
