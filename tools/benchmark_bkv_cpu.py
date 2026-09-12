@@ -14,8 +14,13 @@ import argparse
 from dataclasses import asdict
 import json
 import os
+from pathlib import Path
 import platform
 import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from kvlab.boolean_kv_cpu import benchmark_packed_scan
 from kvlab.boolean_kv_signatures import random_control_signature
