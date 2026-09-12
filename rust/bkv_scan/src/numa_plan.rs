@@ -25,10 +25,7 @@ pub enum NumaPlanError {
     EmptyCaseName,
     EmptyWorkerSet,
     DuplicateCpu(u32),
-    NodeMismatch {
-        cpu_node: u32,
-        placement_node: u32,
-    },
+    NodeMismatch { cpu_node: u32, placement_node: u32 },
 }
 
 impl fmt::Display for NumaPlanError {
