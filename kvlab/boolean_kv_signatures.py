@@ -1,7 +1,7 @@
 """Deterministic BKV-K1 signature and page-aggregation controls.
 
 These are experimental controls, not optimized kernels and not claims that any
-signature captures semantic relevance.  Candidate quality must be established
+signature captures semantic relevance. Candidate quality must be established
 against preregistered dense-attention targets and matched-density baselines.
 """
 
@@ -24,6 +24,17 @@ def _require_bit_length(bit_length: int) -> int:
     if not isinstance(bit_length, int) or isinstance(bit_length, bool) or bit_length <= 0:
         raise SignatureControlError("bit_length must be a positive integer")
     return bit_length
+
+
+def _require_uint(name: str, value: int, *, bits: int) -> int:
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+        or value >= (1 << bits)
+    ):
+        raise SignatureControlError(f"{name} must fit in an unsigned {bits}-bit integer")
+    return value
 
 
 def _digest_bits(payload: bytes, bit_length: int) -> PackedBits:
@@ -51,24 +62,31 @@ def _digest_bits(payload: bytes, bit_length: int) -> PackedBits:
 def random_control_signature(*, bit_length: int, seed: int, identity: int) -> PackedBits:
     """Stable matched-control signature with no semantic claim.
 
-    The function is deterministic across processes and Python hash seeds.  The
+    The function is deterministic across processes and Python hash seeds. The
     ``identity`` field lets experiments freeze one random control per page.
     """
 
     _require_bit_length(bit_length)
-    for name, value in (("seed", seed), ("identity", identity)):
-        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-            raise SignatureControlError(f"{name} must be a non-negative integer")
-    payload = b"random-control\0" + seed.to_bytes(16, "little") + identity.to_bytes(16, "little")
+    seed = _require_uint("seed", seed, bits=128)
+    identity = _require_uint("identity", identity, bits=128)
+    payload = (
+        b"random-control\0"
+        + seed.to_bytes(16, "little")
+        + identity.to_bytes(16, "little")
+    )
     return _digest_bits(payload, bit_length)
 
 
 def sign_projection(values: Sequence[float], *, threshold: float = 0.0) -> PackedBits:
-    """Map finite numeric values to bits via the preregisterable predicate ``x >= threshold``."""
+    """Map finite numeric values to bits via the predicate ``x >= threshold``."""
 
     if not values:
         raise SignatureControlError("sign projection requires at least one value")
-    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not math.isfinite(float(threshold)):
+    if (
+        not isinstance(threshold, (int, float))
+        or isinstance(threshold, bool)
+        or not math.isfinite(float(threshold))
+    ):
         raise SignatureControlError("threshold must be finite")
     normalized = []
     for value in values:
@@ -91,13 +109,9 @@ def positional_control_signature(
     """Stable structural/positional control independent of K/V values."""
 
     _require_bit_length(bit_length)
-    for name, value in (
-        ("logical_page", logical_page),
-        ("token_start", token_start),
-        ("token_count", token_count),
-    ):
-        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-            raise SignatureControlError(f"{name} must be a non-negative integer")
+    logical_page = _require_uint("logical_page", logical_page, bits=64)
+    token_start = _require_uint("token_start", token_start, bits=64)
+    token_count = _require_uint("token_count", token_count, bits=64)
     if token_count == 0:
         raise SignatureControlError("token_count must be non-zero")
     payload = b"positional-control\0" + struct.pack(
@@ -113,7 +127,7 @@ def aggregate_page_signatures(
 ) -> PackedBits:
     """Aggregate token signatures into a page signature using a frozen Boolean rule.
 
-    Supported controls are ``or``, ``and`` and strict ``majority``.  Majority
+    Supported controls are ``or``, ``and`` and strict ``majority``. Majority
     uses ``ones * 2 > n`` so an even tie maps to false; that tie rule is part of
     the experimental contract.
     """
@@ -130,7 +144,10 @@ def aggregate_page_signatures(
     for bit_index in range(width):
         word_index = bit_index // 64
         bit_offset = bit_index % 64
-        ones = sum((signature.words[word_index] >> bit_offset) & 1 for signature in signatures)
+        ones = sum(
+            (signature.words[word_index] >> bit_offset) & 1
+            for signature in signatures
+        )
         if policy == "or":
             value = ones > 0
         elif policy == "and":
