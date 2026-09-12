@@ -28,21 +28,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Format
-        id: format
         run: cargo fmt --manifest-path rust/bkv_scan/Cargo.toml -- --check
-      - name: Capture rustfmt diff
-        if: failure() && steps.format.outcome == 'failure'
-        run: |
-          cargo fmt --manifest-path rust/bkv_scan/Cargo.toml
-          git diff -- rust/bkv_scan > rustfmt.diff
-          test -s rustfmt.diff
-      - name: Upload rustfmt diff
-        if: failure() && steps.format.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: rustfmt-diff-${{ github.sha }}
-          path: rustfmt.diff
-          if-no-files-found: error
       - name: Clippy
         run: cargo clippy --manifest-path rust/bkv_scan/Cargo.toml --all-targets -- -D warnings
       - name: Tests
