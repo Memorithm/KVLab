@@ -6,6 +6,10 @@ use numa_plan::{
     BKV_K4_NUMA_PLAN_SCHEMA_VERSION,
 };
 
+const EVIDENCE_SHA256: &str =
+    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const COMMIT_SHA: &str = "0123456789abcdef0123456789abcdef01234567";
+
 #[test]
 fn local_remote_and_interleave_cases_are_representable() {
     let local = NumaCase::new(
@@ -31,8 +35,8 @@ fn local_remote_and_interleave_cases_are_representable() {
     .unwrap();
 
     let plan = NumaCampaignPlan::new(
-        "sha256:host-evidence",
-        "commit-sha",
+        EVIDENCE_SHA256,
+        COMMIT_SHA,
         vec![local, remote, interleave],
     )
     .unwrap();
@@ -68,20 +72,63 @@ fn local_memory_must_match_declared_worker_node() {
 fn campaign_requires_evidence_commit_and_unique_case_names() {
     let case = NumaCase::new("local", vec![0], 0, MemoryPlacement::LocalNode(0)).unwrap();
     assert_eq!(
-        NumaCampaignPlan::new("", "commit", vec![case.clone()]),
+        NumaCampaignPlan::new("", COMMIT_SHA, vec![case.clone()]),
         Err(NumaCampaignError::MissingHostEvidence)
     );
     assert_eq!(
-        NumaCampaignPlan::new("evidence", "", vec![case.clone()]),
+        NumaCampaignPlan::new("evidence", COMMIT_SHA, vec![case.clone()]),
+        Err(NumaCampaignError::InvalidHostEvidenceSha256)
+    );
+    assert_eq!(
+        NumaCampaignPlan::new(EVIDENCE_SHA256, "", vec![case.clone()]),
         Err(NumaCampaignError::MissingCommitSha)
     );
     assert_eq!(
-        NumaCampaignPlan::new("evidence", "commit", vec![]),
+        NumaCampaignPlan::new(EVIDENCE_SHA256, "commit", vec![case.clone()]),
+        Err(NumaCampaignError::InvalidCommitSha)
+    );
+    assert_eq!(
+        NumaCampaignPlan::new(EVIDENCE_SHA256, COMMIT_SHA, vec![]),
         Err(NumaCampaignError::EmptyCases)
     );
     assert_eq!(
-        NumaCampaignPlan::new("evidence", "commit", vec![case.clone(), case]),
+        NumaCampaignPlan::new(EVIDENCE_SHA256, COMMIT_SHA, vec![case.clone(), case]),
         Err(NumaCampaignError::DuplicateCaseName("local".to_owned()))
+    );
+}
+
+#[test]
+fn provenance_identities_accept_sha1_and_sha256_git_ids() {
+    let case = NumaCase::new("local", vec![0], 0, MemoryPlacement::LocalNode(0)).unwrap();
+    let sha256_git_id = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    assert!(NumaCampaignPlan::new(EVIDENCE_SHA256, COMMIT_SHA, vec![case.clone()]).is_ok());
+    assert!(NumaCampaignPlan::new(EVIDENCE_SHA256, sha256_git_id, vec![case]).is_ok());
+}
+
+#[test]
+fn provenance_identities_reject_non_hex_and_wrong_lengths() {
+    let case = NumaCase::new("local", vec![0], 0, MemoryPlacement::LocalNode(0)).unwrap();
+    let bad_evidence =
+        "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg";
+    assert_eq!(
+        NumaCampaignPlan::new(bad_evidence, COMMIT_SHA, vec![case.clone()]),
+        Err(NumaCampaignError::InvalidHostEvidenceSha256)
+    );
+    assert_eq!(
+        NumaCampaignPlan::new("sha256:abcd", COMMIT_SHA, vec![case.clone()]),
+        Err(NumaCampaignError::InvalidHostEvidenceSha256)
+    );
+    assert_eq!(
+        NumaCampaignPlan::new(EVIDENCE_SHA256, "0123456789abcdef", vec![case.clone()]),
+        Err(NumaCampaignError::InvalidCommitSha)
+    );
+    assert_eq!(
+        NumaCampaignPlan::new(
+            EVIDENCE_SHA256,
+            "0123456789abcdef0123456789abcdef0123456g",
+            vec![case],
+        ),
+        Err(NumaCampaignError::InvalidCommitSha)
     );
 }
 
