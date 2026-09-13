@@ -48,7 +48,13 @@ The first dedicated large-memory target is the verified Dell T430 host captured 
 
 BKV-K4 has now qualified a **distinct socket-local shard** layout for the frozen 32,000,000-page × 256-bit T430 campaign at exact evaluated commit `7e02edc1e3ac3b53cfb352cfad560db439755a0f`. Two 16,000,000-page shards, each scanned by 16 physical workers on its local socket, produced exactly the same 2,283 global candidate page IDs as the 32-physical-core interleaved monolithic oracle. The measured median pair latency was 12.133153 ms versus 15.111998 ms for the monolithic comparator, i.e. 1.245513× for this frozen host/workload. The reported 84.396859 GB/s is derived logical packed-signature throughput, not a direct DRAM-bandwidth measurement. This result is host/workload-specific and does not establish an end-to-end attention speedup.
 
-The next Boolean-KV gate is BKV-K5 / BIKV: preserve page identity and generation while handing Boolean-selected pages to authoritative numerical K/V, then measure Boolean overhead, numerical K/V bytes avoided, first-token/TPOT and downstream correctness before any runtime promotion.
+#### Current BIKV integration status
+
+The first cross-project BIKV handoff is now implemented in `Memorithm/FLAT-ATTENTION`. At FLAT commit `4e686bcad4f73e79d3cbf4d84c92a6e9b4673383`, BKV-K6.2 compares Boolean-selected paged numerical decode against the existing M16 paged decode while preserving original logical token positions and exact full/selected/avoided logical numerical K/V byte accounting. Its all-accept path checks O/LSE parity against M16 and its sparse path checks a scalar oracle restricted to the selected original positions.
+
+That FLAT harness is correctness and host-observed timing evidence for the declared synthetic fixture, not a KVLab T430 BKV-K5 hardware result and not a representative-model performance claim. Query signatures are still generated from a host mirror in that harness; the timing is not a GPU timestamp measurement; no universal TTFT/TPOT, DRAM-bandwidth, model-quality, or end-to-end attention speedup claim follows from it.
+
+The next KVLab Boolean-KV gate is therefore to retain/cross-link BIKV evidence packs under KVLab provenance and execute target-host/model measurements of Boolean overhead, numerical K/V bytes avoided, `numerical_KV_bytes_avoided / Boolean_KV_bytes_read`, first-token latency, TPOT, candidate recall/false negatives and downstream correctness before runtime promotion or adaptive placement.
 
 ## Canon
 
