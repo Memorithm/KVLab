@@ -39,6 +39,54 @@ fi
 PREEXISTING_UNTRACKED="$(git ls-files --others --exclude-standard | wc -l | tr -d ' ')"
 HEAD="$(git rev-parse HEAD)"
 
+# Fail closed if the physical-thread representatives no longer describe the
+# verified two-socket/two-node T430 topology. `lscpu -p` is locale-independent.
+TOPOLOGY_CSV="$(mktemp)"
+trap 'rm -f "$TOPOLOGY_CSV"' EXIT
+lscpu -p=CPU,CORE,SOCKET,NODE > "$TOPOLOGY_CSV"
+python3 - "$TOPOLOGY_CSV" "$NODE0_CPUS" "$NODE1_CPUS" <<'PY'
+import csv
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected = {
+    0: [int(x) for x in sys.argv[2].split(",")],
+    1: [int(x) for x in sys.argv[3].split(",")],
+}
+rows = {}
+with path.open() as f:
+    for raw in f:
+        if raw.startswith("#") or not raw.strip():
+            continue
+        cpu, core, socket, node = (int(x) for x in raw.strip().split(","))
+        rows[cpu] = (core, socket, node)
+
+if set(socket for _, socket, _ in rows.values()) != {0, 1}:
+    raise SystemExit("unexpected socket topology: expected sockets 0 and 1")
+if set(node for _, _, node in rows.values()) != {0, 1}:
+    raise SystemExit("unexpected NUMA topology: expected nodes 0 and 1")
+if len({(socket, core) for core, socket, _ in rows.values()}) != 32:
+    raise SystemExit("unexpected physical-core count: expected 32")
+
+for node, cpus in expected.items():
+    cores = set()
+    for cpu in cpus:
+        if cpu not in rows:
+            raise SystemExit(f"expected CPU {cpu} is not online")
+        core, socket, actual_node = rows[cpu]
+        if socket != node or actual_node != node:
+            raise SystemExit(
+                f"CPU {cpu} maps to socket={socket}, node={actual_node}; "
+                f"expected socket=node={node}"
+            )
+        cores.add(core)
+    if len(cores) != 16:
+        raise SystemExit(
+            f"node {node} physical representative set spans {len(cores)} cores; expected 16"
+        )
+PY
+
 mkdir -p "$OUT"
 {
   echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -57,7 +105,7 @@ mkdir -p "$OUT"
 } > "$OUT/manifest.txt"
 
 lscpu > "$OUT/lscpu.txt"
-lscpu -e=CPU,CORE,SOCKET,NODE,ONLINE > "$OUT/lscpu-topology.txt"
+cp "$TOPOLOGY_CSV" "$OUT/lscpu-topology.csv"
 numactl --hardware > "$OUT/numactl-hardware.txt"
 cat /proc/meminfo > "$OUT/meminfo.txt"
 
