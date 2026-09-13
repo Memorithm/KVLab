@@ -8,6 +8,7 @@ CPU/GPU-cooperative experiments.  It makes no performance claim.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Iterable, Sequence
 
 
@@ -24,6 +25,11 @@ def _word_count(bit_length: int) -> int:
     if not isinstance(bit_length, int) or isinstance(bit_length, bool) or bit_length <= 0:
         raise BooleanKvError("bit_length must be a positive integer")
     return (bit_length + WORD_BITS - 1) // WORD_BITS
+
+
+def _require_non_negative_byte_count(name: str, value: int) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise BooleanKvError(f"{name} must be a non-negative integer byte count")
 
 
 @dataclass(frozen=True)
@@ -126,6 +132,38 @@ class BooleanKvAccounting:
     key_physical_bytes: int
     value_physical_bytes: int
     total_physical_bytes: int
+
+
+@dataclass(frozen=True)
+class BooleanKvTrafficAccounting:
+    """Measured traffic counters for Boolean-indexed numerical KV routing.
+
+    The counters are observations supplied by an experiment/runtime.  This type
+    never infers avoided numerical traffic from candidate density, logical page
+    counts, or signature width.  The ratio is therefore available only when
+    Boolean metadata traffic was actually recorded.
+    """
+
+    numerical_kv_bytes_avoided: int
+    boolean_kv_bytes_read: int
+
+    def __post_init__(self) -> None:
+        _require_non_negative_byte_count(
+            "numerical_kv_bytes_avoided", self.numerical_kv_bytes_avoided
+        )
+        _require_non_negative_byte_count("boolean_kv_bytes_read", self.boolean_kv_bytes_read)
+        if self.numerical_kv_bytes_avoided > 0 and self.boolean_kv_bytes_read == 0:
+            raise BooleanKvError(
+                "non-zero numerical KV bytes avoided requires measured Boolean KV bytes read"
+            )
+
+    @property
+    def numerical_bytes_avoided_per_boolean_byte(self) -> Fraction | None:
+        """Return the exact measured traffic ratio, or ``None`` without reads."""
+
+        if self.boolean_kv_bytes_read == 0:
+            return None
+        return Fraction(self.numerical_kv_bytes_avoided, self.boolean_kv_bytes_read)
 
 
 @dataclass(frozen=True)
