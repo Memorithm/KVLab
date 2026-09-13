@@ -99,9 +99,26 @@ pub struct NumaCampaignPlan {
 #[non_exhaustive]
 pub enum NumaCampaignError {
     MissingHostEvidence,
+    InvalidHostEvidenceSha256,
     MissingCommitSha,
+    InvalidCommitSha,
     EmptyCases,
     DuplicateCaseName(String),
+}
+
+fn is_hex(value: &str) -> bool {
+    value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn is_sha256_identity(value: &str) -> bool {
+    let Some(digest) = value.strip_prefix("sha256:") else {
+        return false;
+    };
+    digest.len() == 64 && is_hex(digest)
+}
+
+fn is_git_object_id(value: &str) -> bool {
+    matches!(value.len(), 40 | 64) && is_hex(value)
 }
 
 impl NumaCampaignPlan {
@@ -114,9 +131,15 @@ impl NumaCampaignPlan {
         if host_evidence_sha256.trim().is_empty() {
             return Err(NumaCampaignError::MissingHostEvidence);
         }
+        if !is_sha256_identity(&host_evidence_sha256) {
+            return Err(NumaCampaignError::InvalidHostEvidenceSha256);
+        }
         let commit_sha = commit_sha.into();
         if commit_sha.trim().is_empty() {
             return Err(NumaCampaignError::MissingCommitSha);
+        }
+        if !is_git_object_id(&commit_sha) {
+            return Err(NumaCampaignError::InvalidCommitSha);
         }
         if cases.is_empty() {
             return Err(NumaCampaignError::EmptyCases);
