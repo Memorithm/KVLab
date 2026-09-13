@@ -1,8 +1,10 @@
 import unittest
+from fractions import Fraction
 
 from kvlab.boolean_kv import (
     BooleanKvCache,
     BooleanKvError,
+    BooleanKvTrafficAccounting,
     PackedBits,
     pack_bits,
 )
@@ -34,6 +36,44 @@ class PackedBitsTests(unittest.TestCase):
     def test_width_mismatch_fails_closed(self) -> None:
         with self.assertRaises(BooleanKvError):
             pack_bits([True]).hamming_distance(pack_bits([True, False]))
+
+
+class BooleanKvTrafficAccountingTests(unittest.TestCase):
+    def test_measured_traffic_ratio_is_exact(self) -> None:
+        accounting = BooleanKvTrafficAccounting(
+            numerical_kv_bytes_avoided=4096,
+            boolean_kv_bytes_read=256,
+        )
+        self.assertEqual(
+            accounting.numerical_bytes_avoided_per_boolean_byte,
+            Fraction(16, 1),
+        )
+
+    def test_zero_traffic_has_no_fabricated_ratio(self) -> None:
+        accounting = BooleanKvTrafficAccounting(
+            numerical_kv_bytes_avoided=0,
+            boolean_kv_bytes_read=0,
+        )
+        self.assertIsNone(accounting.numerical_bytes_avoided_per_boolean_byte)
+
+    def test_avoided_traffic_without_boolean_reads_fails_closed(self) -> None:
+        with self.assertRaises(BooleanKvError):
+            BooleanKvTrafficAccounting(
+                numerical_kv_bytes_avoided=1,
+                boolean_kv_bytes_read=0,
+            )
+
+    def test_traffic_counts_reject_negative_and_boolean_values(self) -> None:
+        with self.assertRaises(BooleanKvError):
+            BooleanKvTrafficAccounting(
+                numerical_kv_bytes_avoided=-1,
+                boolean_kv_bytes_read=1,
+            )
+        with self.assertRaises(BooleanKvError):
+            BooleanKvTrafficAccounting(
+                numerical_kv_bytes_avoided=0,
+                boolean_kv_bytes_read=True,
+            )
 
 
 class BooleanKvCacheTests(unittest.TestCase):
