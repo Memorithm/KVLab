@@ -34,12 +34,8 @@ fn local_remote_and_interleave_cases_are_representable() {
     )
     .unwrap();
 
-    let plan = NumaCampaignPlan::new(
-        EVIDENCE_SHA256,
-        COMMIT_SHA,
-        vec![local, remote, interleave],
-    )
-    .unwrap();
+    let plan = NumaCampaignPlan::new(EVIDENCE_SHA256, COMMIT_SHA, vec![local, remote, interleave])
+        .unwrap();
     assert_eq!(plan.schema_version, BKV_K4_NUMA_PLAN_SCHEMA_VERSION);
     assert_eq!(plan.cases.len(), 3);
 }
@@ -108,8 +104,7 @@ fn provenance_identities_accept_sha1_and_sha256_git_ids() {
 #[test]
 fn provenance_identities_reject_non_hex_and_wrong_lengths() {
     let case = NumaCase::new("local", vec![0], 0, MemoryPlacement::LocalNode(0)).unwrap();
-    let bad_evidence =
-        "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg";
+    let bad_evidence = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg";
     assert_eq!(
         NumaCampaignPlan::new(bad_evidence, COMMIT_SHA, vec![case.clone()]),
         Err(NumaCampaignError::InvalidHostEvidenceSha256)
