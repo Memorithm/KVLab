@@ -18,7 +18,6 @@ SEED="${SEED:-1}"
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
-mkdir -p "$OUT"
 
 if ! command -v numactl >/dev/null 2>&1; then
   echo "error: numactl is required" >&2
@@ -26,10 +25,19 @@ if ! command -v numactl >/dev/null 2>&1; then
 fi
 
 HEAD="$(git rev-parse HEAD)"
+TRACKED_DIRTY=false
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  TRACKED_DIRTY=true
+fi
+UNTRACKED_COUNT="$(git ls-files --others --exclude-standard | wc -l | tr -d ' ')"
+
+mkdir -p "$OUT"
+
 {
   echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "git_head=$HEAD"
-  echo "git_dirty=$(test -n "$(git status --porcelain)" && echo true || echo false)"
+  echo "git_tracked_dirty=$TRACKED_DIRTY"
+  echo "git_untracked_count_before=$UNTRACKED_COUNT"
   echo "pages=$PAGES"
   echo "signature_bits=$SIGNATURE_BITS"
   echo "max_distance=$MAX_DISTANCE"
@@ -38,6 +46,7 @@ HEAD="$(git rev-parse HEAD)"
   echo "seed=$SEED"
 } > "$OUT/manifest.txt"
 
+git status --porcelain --untracked-files=all > "$OUT/git-status-before.txt"
 lscpu > "$OUT/lscpu.txt"
 lscpu -e=CPU,CORE,SOCKET,NODE,ONLINE > "$OUT/lscpu-topology.txt"
 numactl --hardware > "$OUT/numactl-hardware.txt"
