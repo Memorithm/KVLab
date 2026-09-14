@@ -17,10 +17,12 @@ from kvlab.prospect_selection_handoff import ProspectKvSelectionHandoffV1
 
 _FAKE_BACKEND = r'''
 import base64
+import hashlib
 import json
 import sys
 
-request = json.loads(sys.stdin.read())
+payload = sys.stdin.read()
+request = json.loads(payload)
 policy = request["policy"]
 retained = request["retained_token_ids"]
 mode = request["mode"]
@@ -30,7 +32,11 @@ else:
     accuracy = {"lru": 0.76, "magnitude": 0.78}.get(policy, 0.70)
 artifact = f"{mode}|{policy}|{','.join(str(token) for token in retained)}".encode()
 response = {
-    "schema": "kvlab.prospect-kv-backend-response/v1",
+    "schema": "kvlab.prospect-kv-backend-response/v2",
+    "request_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    "applied_mode": mode,
+    "applied_policy": policy,
+    "applied_retained_token_ids": retained,
     "output_artifact_base64": base64.b64encode(artifact).decode("ascii"),
     "metrics": [
         {
@@ -54,11 +60,17 @@ sys.stdout.write(json.dumps(response, sort_keys=True, separators=(",", ":"), all
 
 _NONCANONICAL_BACKEND = r'''
 import base64
+import hashlib
 import json
 import sys
-sys.stdin.read()
+payload = sys.stdin.read()
+request = json.loads(payload)
 response = {
-    "schema": "kvlab.prospect-kv-backend-response/v1",
+    "schema": "kvlab.prospect-kv-backend-response/v2",
+    "request_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    "applied_mode": request["mode"],
+    "applied_policy": request["policy"],
+    "applied_retained_token_ids": request["retained_token_ids"],
     "output_artifact_base64": base64.b64encode(b"output").decode("ascii"),
     "metrics": [{
         "name": "quality",
@@ -73,12 +85,18 @@ sys.stdout.write(json.dumps(response, sort_keys=True, indent=2))
 
 _MISMATCHED_METRIC_BACKEND = r'''
 import base64
+import hashlib
 import json
 import sys
-request = json.loads(sys.stdin.read())
+payload = sys.stdin.read()
+request = json.loads(payload)
 mode = request["mode"]
 response = {
-    "schema": "kvlab.prospect-kv-backend-response/v1",
+    "schema": "kvlab.prospect-kv-backend-response/v2",
+    "request_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    "applied_mode": mode,
+    "applied_policy": request["policy"],
+    "applied_retained_token_ids": request["retained_token_ids"],
     "output_artifact_base64": base64.b64encode(mode.encode()).decode("ascii"),
     "metrics": [{
         "name": "quality",
@@ -86,6 +104,57 @@ response = {
         "unit": "ratio" if mode == "baseline" else "percent",
         "preference": "higher_is_better",
         "value": 0.8,
+    }],
+}
+sys.stdout.write(json.dumps(response, sort_keys=True, separators=(",", ":")))
+'''
+
+_BAD_REQUEST_HASH_BACKEND = r'''
+import base64
+import json
+import sys
+request = json.loads(sys.stdin.read())
+response = {
+    "schema": "kvlab.prospect-kv-backend-response/v2",
+    "request_sha256": "0" * 64,
+    "applied_mode": request["mode"],
+    "applied_policy": request["policy"],
+    "applied_retained_token_ids": request["retained_token_ids"],
+    "output_artifact_base64": base64.b64encode(b"output").decode("ascii"),
+    "metrics": [{
+        "name": "quality",
+        "kind": "quality",
+        "unit": "ratio",
+        "preference": "higher_is_better",
+        "value": 1.0,
+    }],
+}
+sys.stdout.write(json.dumps(response, sort_keys=True, separators=(",", ":")))
+'''
+
+_BAD_RETAINED_BACKEND = r'''
+import base64
+import hashlib
+import json
+import sys
+payload = sys.stdin.read()
+request = json.loads(payload)
+applied = list(request["retained_token_ids"])
+if len(applied) > 1:
+    applied = applied[1:]
+response = {
+    "schema": "kvlab.prospect-kv-backend-response/v2",
+    "request_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    "applied_mode": request["mode"],
+    "applied_policy": request["policy"],
+    "applied_retained_token_ids": applied,
+    "output_artifact_base64": base64.b64encode(b"output").decode("ascii"),
+    "metrics": [{
+        "name": "quality",
+        "kind": "quality",
+        "unit": "ratio",
+        "preference": "higher_is_better",
+        "value": 1.0,
     }],
 }
 sys.stdout.write(json.dumps(response, sort_keys=True, separators=(",", ":")))
@@ -175,6 +244,24 @@ class ProspectKvRealModelRunnerTests(unittest.TestCase):
     def test_rejects_baseline_candidate_metric_metadata_drift(self) -> None:
         backend = ExternalJsonBackend((sys.executable, "-c", _MISMATCHED_METRIC_BACKEND))
         with self.assertRaisesRegex(ProspectKvRealModelRunnerError, "metadata mismatch"):
+            run_real_model_selection_campaign(
+                context=_context(),
+                selections=(_selection("lru", (10, 12, 14)),),
+                backend=backend,
+            )
+
+    def test_rejects_response_for_different_request(self) -> None:
+        backend = ExternalJsonBackend((sys.executable, "-c", _BAD_REQUEST_HASH_BACKEND))
+        with self.assertRaisesRegex(ProspectKvRealModelRunnerError, "exact request SHA-256"):
+            run_real_model_selection_campaign(
+                context=_context(),
+                selections=(_selection("lru", (10, 12, 14)),),
+                backend=backend,
+            )
+
+    def test_rejects_backend_retained_set_drift(self) -> None:
+        backend = ExternalJsonBackend((sys.executable, "-c", _BAD_RETAINED_BACKEND))
+        with self.assertRaisesRegex(ProspectKvRealModelRunnerError, "do not match request"):
             run_real_model_selection_campaign(
                 context=_context(),
                 selections=(_selection("lru", (10, 12, 14)),),
