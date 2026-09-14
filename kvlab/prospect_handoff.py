@@ -80,9 +80,21 @@ def _require_word_tuple(name: str, value: object) -> tuple[str, ...]:
     return words
 
 
+def _snapshot_sequence(name: str, value: object) -> tuple[Any, ...]:
+    """Detach direct-constructor inputs from caller-owned mutable containers."""
+    if not isinstance(value, (tuple, list)):
+        raise ProspectBkvHandoffError(f"{name} must be a tuple or list")
+    return tuple(value)
+
+
 @dataclass(frozen=True)
 class ProspectBkvHandoffV1:
-    """Self-validating, canonical structural handoff for one BKV query."""
+    """Self-validating, canonical structural handoff for one BKV query.
+
+    The direct constructor snapshots list/tuple inputs before validation,
+    including nested page-word lists. Frozen dataclass fields alone would not
+    prevent caller-owned lists from changing a previously validated handoff.
+    """
 
     schema: str
     signature_bits: int
@@ -96,6 +108,16 @@ class ProspectBkvHandoffV1:
         if self.schema != PROSPECT_BKV_HANDOFF_SCHEMA_V1:
             raise ProspectBkvHandoffError("unsupported ProspectEngine BKV handoff schema")
 
+        # Validate exactly the snapshot that will be retained, not the original
+        # lists followed by a later copy. Never retain nested mutable aliases.
+        query_words = _snapshot_sequence("query_words", self.query_words)
+        raw_pages = _snapshot_sequence("page_words", self.page_words)
+        page_words = tuple(
+            _snapshot_sequence(f"page_words[{index}]", words)
+            for index, words in enumerate(raw_pages)
+        )
+        admitted = _snapshot_sequence("admitted_pages", self.admitted_pages)
+
         signature_bits = _require_plain_non_negative_int("signature_bits", self.signature_bits)
         if signature_bits == 0:
             raise ProspectBkvHandoffError("signature_bits must be greater than zero")
@@ -103,13 +125,12 @@ class ProspectBkvHandoffV1:
         max_distance = _require_plain_non_negative_int("max_distance", self.max_distance)
         if max_distance > signature_bits:
             raise ProspectBkvHandoffError("max_distance cannot exceed signature_bits")
-        if not self.page_words:
+        if not page_words:
             raise ProspectBkvHandoffError("at least one Boolean KV page is required")
 
-        query = _packed_from_hex(signature_bits, self.query_words)
-        pages = tuple(_packed_from_hex(signature_bits, words) for words in self.page_words)
+        query = _packed_from_hex(signature_bits, query_words)
+        pages = tuple(_packed_from_hex(signature_bits, words) for words in page_words)
 
-        admitted = tuple(self.admitted_pages)
         for logical_page in admitted:
             _require_plain_non_negative_int("admitted page", logical_page)
             if logical_page >= len(pages):
@@ -128,6 +149,10 @@ class ProspectBkvHandoffV1:
             raise ProspectBkvHandoffError(
                 "admitted_pages does not match the exact Hamming rule over recorded signatures"
             )
+
+        object.__setattr__(self, "query_words", query_words)
+        object.__setattr__(self, "page_words", page_words)
+        object.__setattr__(self, "admitted_pages", admitted)
 
     @classmethod
     def capture(
