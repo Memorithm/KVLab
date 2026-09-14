@@ -10,26 +10,39 @@ runtime.
 command with `shell=False`. Each invocation receives one canonical JSON request
 on stdin. The backend must return one canonical JSON response on stdout.
 
-Request schema: `kvlab.prospect-kv-backend-request/v1`.
+Current request schema: `kvlab.prospect-kv-backend-request/v2`.
 
 The request binds the experiment, KVLab revision, model/tokenizer/runtime
 revisions, evaluation id, trace digest, seed, exact input token ids, exact
 retained token ids, bytes per token, and the policy provenance label. Baseline
 requests retain the full input and carry a null policy.
 
-Response schema: `kvlab.prospect-kv-backend-response/v1`.
+Current response schema: `kvlab.prospect-kv-backend-response/v2`.
 
 The response contains:
 
+- `request_sha256`: SHA-256 of the exact canonical request bytes received by the
+  backend;
+- `applied_mode`, `applied_policy`, and `applied_retained_token_ids`: the exact
+  execution parameters the backend claims to have applied;
 - `output_artifact_base64`: opaque non-empty bytes representing the backend's
   evaluation artefact;
 - `metrics`: explicitly named finite observations with kind, unit, preference,
   and value.
 
-KVLab decodes the artefact and computes its SHA-256 digest itself. A backend
-cannot provide the digest used by the evidence envelope. Baseline and candidate
-metric names and metadata must match exactly before KVLab constructs paired
-`ObservedMetric` records.
+KVLab independently computes the request SHA-256 before execution and rejects a
+response whose attestation does not match the exact request, mode, policy, or
+retained-token list. It also decodes the output artefact and computes the
+artefact SHA-256 itself. The backend cannot choose either digest stored or
+validated by the runner.
+
+These checks make request/response binding auditable. They do **not** provide
+cryptographic remote attestation of a backend's internal model execution; a
+backend remains responsible for truthfully reporting which KV selection it
+actually applied.
+
+Baseline and candidate metric names and metadata must match exactly before
+KVLab constructs paired `ObservedMetric` records.
 
 ## Campaign semantics
 
