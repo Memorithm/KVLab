@@ -26,7 +26,7 @@ from .prospect_position_comparison import preflight_budget_matched_campaign
 from .prospect_smollm2_r1_suite import (
     BYTES_PER_TOKEN, MODEL_ID, MODEL_REVISION, MODEL_SHA256, RUNTIME_BACKEND,
     CampaignInput, CampaignVerification, SuiteResultManifest,
-    SmolLm2R1SuiteError, detached_worktree, require_git_commit,
+    SmolLm2R1SuiteError, require_git_commit,
     require_model_artifact, read_git_file, _run,
 )
 
@@ -82,6 +82,21 @@ def _command(argv, *, cwd=None, env=None):
     if completed.stderr:
         print(completed.stderr, file=sys.stderr, end="")
     return completed
+
+
+@contextmanager
+def detached_worktree(repo: Path, revision: str, destination: Path) -> Iterator[Path]:
+    # Unlike R1's interactive helper, capture Git's checkout banner as well.
+    _command(("git", "-C", repo, "worktree", "add", "--detach", destination, revision))
+    try:
+        yield destination
+    finally:
+        try:
+            _command(("git", "-C", repo, "worktree", "remove", "--force", destination))
+        except SmolLm2R1SuiteError as error:
+            # Do not obscure a primary execution failure or recursively delete
+            # a path that Git refused to remove. The workspace is temporary.
+            print(f"temporary worktree cleanup failed: {error}", file=sys.stderr)
 
 
 def _build(worktree: Path, target: Path, package: str, binary: str) -> Path:
