@@ -1,6 +1,5 @@
 import json
-
-import pytest
+import unittest
 
 from kvlab.prospect_real_model_eviction import ObservedMetric
 from kvlab.prospect_real_model_selection import (
@@ -65,65 +64,71 @@ def _evidence(
     )
 
 
-def test_capture_round_trips_observed_explicit_selection() -> None:
-    evidence = _evidence()
-    assert evidence.schema == PROSPECT_KV_REAL_MODEL_SELECTION_SCHEMA_V1
-    assert evidence.selection.policy == "lru"
-    assert evidence.selection.retained_token_ids == (10, 12, 14)
-    assert evidence.baseline_logical_kv_bytes == 320
-    assert evidence.candidate_logical_kv_bytes == 192
-    assert evidence.metrics[0].delta == pytest.approx(-0.02)
+class ProspectKvRealModelSelectionTests(unittest.TestCase):
+    def test_capture_round_trips_observed_explicit_selection(self) -> None:
+        evidence = _evidence()
+        self.assertEqual(evidence.schema, PROSPECT_KV_REAL_MODEL_SELECTION_SCHEMA_V1)
+        self.assertEqual(evidence.selection.policy, "lru")
+        self.assertEqual(evidence.selection.retained_token_ids, (10, 12, 14))
+        self.assertEqual(evidence.baseline_logical_kv_bytes, 320)
+        self.assertEqual(evidence.candidate_logical_kv_bytes, 192)
+        self.assertAlmostEqual(evidence.metrics[0].delta, -0.02)
 
-    payload = evidence.canonical_json()
-    assert ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(payload) == evidence
+        payload = evidence.canonical_json()
+        self.assertEqual(
+            ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(payload), evidence
+        )
+
+    def test_same_budget_can_represent_distinct_policy_selections_without_ranking(self) -> None:
+        lru = _evidence(policy="lru", retained=(10, 12, 14), candidate_hash="3")
+        magnitude = _evidence(
+            policy="magnitude",
+            retained=(11, 13, 14),
+            candidate_hash="4",
+        )
+
+        self.assertEqual(lru.candidate_logical_kv_bytes, 192)
+        self.assertEqual(magnitude.candidate_logical_kv_bytes, 192)
+        self.assertNotEqual(lru.selection.retained_token_ids, magnitude.selection.retained_token_ids)
+        self.assertNotEqual(lru.selection.policy, magnitude.selection.policy)
+
+    def test_decoder_rejects_tampered_metric_delta_and_logical_bytes(self) -> None:
+        raw = json.loads(_evidence().canonical_json())
+        raw["metrics"][0]["delta"] = 0.5
+        tampered = json.dumps(raw, sort_keys=True, separators=(",", ":"))
+        with self.assertRaises(ProspectKvRealModelSelectionError):
+            ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(tampered)
+
+        raw = json.loads(_evidence().canonical_json())
+        raw["candidate_logical_kv_bytes"] = 64
+        tampered = json.dumps(raw, sort_keys=True, separators=(",", ":"))
+        with self.assertRaises(ProspectKvRealModelSelectionError):
+            ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(tampered)
+
+    def test_decoder_rejects_bad_provenance_and_noncanonical_json(self) -> None:
+        raw = json.loads(_evidence().canonical_json())
+        raw["run_repository_revision"] = "deadbeef"
+        tampered = json.dumps(raw, sort_keys=True, separators=(",", ":"))
+        with self.assertRaises(ProspectKvRealModelSelectionError):
+            ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(tampered)
+
+        raw = json.loads(_evidence().canonical_json())
+        raw["seed"] = 2**64
+        tampered = json.dumps(raw, sort_keys=True, separators=(",", ":"))
+        with self.assertRaises(ProspectKvRealModelSelectionError):
+            ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(tampered)
+
+        noncanonical = json.dumps(
+            json.loads(_evidence().canonical_json()), sort_keys=True, indent=2
+        )
+        with self.assertRaises(ProspectKvRealModelSelectionError):
+            ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(noncanonical)
+
+    def test_policy_label_does_not_claim_heuristic_replay(self) -> None:
+        evidence = _evidence(policy="learned-policy-v7", retained=(10, 13, 14))
+        self.assertEqual(evidence.selection.policy, "learned-policy-v7")
+        self.assertEqual(evidence.selection.retained_token_ids, (10, 13, 14))
 
 
-def test_same_budget_can_represent_distinct_policy_selections_without_ranking() -> None:
-    lru = _evidence(policy="lru", retained=(10, 12, 14), candidate_hash="3")
-    magnitude = _evidence(
-        policy="magnitude",
-        retained=(11, 13, 14),
-        candidate_hash="4",
-    )
-
-    assert lru.candidate_logical_kv_bytes == magnitude.candidate_logical_kv_bytes == 192
-    assert lru.selection.retained_token_ids != magnitude.selection.retained_token_ids
-    assert lru.selection.policy != magnitude.selection.policy
-
-
-def test_decoder_rejects_tampered_metric_delta_and_logical_bytes() -> None:
-    raw = json.loads(_evidence().canonical_json())
-    raw["metrics"][0]["delta"] = 0.5
-    tampered = json.dumps(raw, sort_keys=True, separators=(",", ":"))
-    with pytest.raises(ProspectKvRealModelSelectionError):
-        ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(tampered)
-
-    raw = json.loads(_evidence().canonical_json())
-    raw["candidate_logical_kv_bytes"] = 64
-    tampered = json.dumps(raw, sort_keys=True, separators=(",", ":"))
-    with pytest.raises(ProspectKvRealModelSelectionError):
-        ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(tampered)
-
-
-def test_decoder_rejects_bad_provenance_and_noncanonical_json() -> None:
-    raw = json.loads(_evidence().canonical_json())
-    raw["run_repository_revision"] = "deadbeef"
-    tampered = json.dumps(raw, sort_keys=True, separators=(",", ":"))
-    with pytest.raises(ProspectKvRealModelSelectionError):
-        ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(tampered)
-
-    raw = json.loads(_evidence().canonical_json())
-    raw["seed"] = 2**64
-    tampered = json.dumps(raw, sort_keys=True, separators=(",", ":"))
-    with pytest.raises(ProspectKvRealModelSelectionError):
-        ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(tampered)
-
-    noncanonical = json.dumps(json.loads(_evidence().canonical_json()), sort_keys=True, indent=2)
-    with pytest.raises(ProspectKvRealModelSelectionError):
-        ProspectKvRealModelSelectionEvidenceV1.from_canonical_json(noncanonical)
-
-
-def test_policy_label_does_not_claim_heuristic_replay() -> None:
-    evidence = _evidence(policy="learned-policy-v7", retained=(10, 13, 14))
-    assert evidence.selection.policy == "learned-policy-v7"
-    assert evidence.selection.retained_token_ids == (10, 13, 14)
+if __name__ == "__main__":
+    unittest.main()
