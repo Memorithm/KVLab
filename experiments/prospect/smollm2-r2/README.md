@@ -1,6 +1,6 @@
 # SmolLM2 R2 position-native campaign preregistration
 
-Status: **input specifications only; no observed CUDA result is recorded here**.
+Status: **input specifications and execution tooling; no observed CUDA result is recorded here**.
 
 ## Why a successor is necessary
 
@@ -46,27 +46,73 @@ claim is authorized by this preregistration.
 From the KVLab repository root:
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_smollm2_r2_position_preregistration.py'
+python3 -m unittest discover -s tests -p 'test_smollm2_r2*.py'
 for budget in 07 14 20; do
   python3 -m kvlab.prospect_position_comparison \
     "experiments/prospect/smollm2-r2/retain-${budget}-of-27.json"
 done
 ```
 
-## Execution boundary
+## R2 suite launcher
 
-Use the generic `kvlab.prospect_real_model_campaign_v4` executor from a clean
-checkout of the declared KVLab execution revision
-`404577ce939093767dc75d2d67de2fe3c16fa4dc`, with the exact R2 JSON bytes and
-NNIS `091aabbb3e132627cf64716720aae530442d2a32`. Build the backend with
-`cargo build --locked --release -p nnis-cli --bin nnis-kvlab-backend-v4` and
-pass its exact model/tokenizer/runtime identities through the existing v4 argv
-contract. Verify each resulting directory with `prospect verify-kv-campaign`
-from an explicitly recorded verifier revision that contains a committed lockfile.
+`python3 -m kvlab.prospect_smollm2_r2_suite` uses four distinct immutable pins:
+
+| Role | Revision |
+| --- | --- |
+| Preregistered R2 JSON bytes | KVLab `216b49ae4d62ed4c4c2edfd1e88f929d0a0fd9e5` |
+| Actual v4 campaign executor | KVLab `404577ce939093767dc75d2d67de2fe3c16fa4dc` |
+| F32 NNIS backend | NNIS `091aabbb3e132627cf64716720aae530442d2a32` |
+| Locked per-campaign verifier | ProspectEngine `298acdc91682ef1d09914b6f964e8934828825c0` |
+
+The launcher reuses the existing worktree, streamed model hashing and subprocess
+utilities; it does not mutate R1 constants, copy model execution code, modify the
+caller's checkout, or change any preregistered JSON. Each input's exact SHA-256 is
+checked before parsing. Repository commits must already be present in the local
+clones; the launcher does not fetch or install dependencies on the user's behalf.
+Cargo may download the dependencies declared by the committed lockfiles.
+
+Install the explicit toolchain first:
+
+```bash
+rustup toolchain install 1.89.0 --profile minimal
+```
+
+With `NNIS_REPO`, `PROSPECT_REPO`, `MODEL_DIR`, and `OUTPUT_DIR` set to the actual
+local paths, run the no-CUDA readiness check from the KVLab repository root:
+
+```bash
+python3 -m kvlab.prospect_smollm2_r2_suite \
+  --nnis-repo "${NNIS_REPO:?Set NNIS_REPO}" \
+  --prospect-repo "${PROSPECT_REPO:?Set PROSPECT_REPO}" \
+  --model-dir "${MODEL_DIR:?Set MODEL_DIR}" \
+  --output-dir "${OUTPUT_DIR:?Set a new OUTPUT_DIR}" \
+  --preflight-only
+```
+
+Preflight verifies commits and the local model digest, builds both binaries with
+Rust 1.89 and `--locked --release`, and runs both pinned input verifiers against
+all three campaign files. It does not invoke the NNIS backend, initialize CUDA,
+create an observed result, or create the requested output directory. A successful
+preflight has schema `kvlab.smollm2-r2-position-suite-preflight/v1`.
+
+Removing `--preflight-only` explicitly requests actual CUDA model execution. The
+existing pinned executor runs one baseline and two candidates per budget. Each
+complete campaign directory is independently checked by the pinned ProspectEngine
+binary; the launcher then checks the exact input identities, positions and budgets
+in its returned summary. Only after all three succeed is the staged suite renamed
+to the new output directory. Python import selection uses the pinned worktree as
+its working directory and ignores inherited Python path/home and user-site settings.
+
+The result schema is `kvlab.smollm2-r2-position-suite-result/v1`. It preserves the
+per-campaign directories, verification summaries and `suite-manifest.json`.
+Diagnostics are written to stderr; stdout is reserved for the final JSON response.
+Errors and interrupts remove the staged result. Existing output entries, including
+dangling symlinks, are rejected. A cooperative sibling-directory lock prevents two
+launches from using the same destination. The parent directory must be trusted;
+this is neither an adversarial filesystem sandbox nor a power-loss durability claim.
 
 The fixed `prospect_smollm2_r1_suite` launcher and
-`prospect verify-kv-campaign-suite` contract intentionally remain R1-only.
-They must not be used by changing their constants or relabelling R2 outputs as
-R1. No R2 whole-suite execution launcher or whole-suite result is supplied by
-this preregistration. Individual R2 campaigns use the already existing generic
-v4 execution and verification contracts.
+`prospect verify-kv-campaign-suite` remain R1-only. R2 results must not be relabelled
+as R1. The R2 launcher uses the generic `prospect verify-kv-campaign` for each budget;
+a dedicated independent R2 whole-suite consumer is a separate integration step.
+Mocked orchestration tests are not model executions or measured quality evidence.
