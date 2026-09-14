@@ -385,5 +385,9 @@ def _require_sha256(name: str, value: str) -> None:
 
 
 def _nearly_equal(left: float, right: float) -> bool:
+    # Finite endpoints can yield an infinite derived delta. Do not admit it
+    # through a relative-tolerance comparison of infinity against infinity.
+    if not math.isfinite(left) or not math.isfinite(right):
+        return False
     scale = max(abs(left), abs(right))
     return abs(left - right) <= _FLOAT_ABS_TOLERANCE + _FLOAT_REL_TOLERANCE * scale
