@@ -6,13 +6,17 @@ the matched-KV setting described by Heo et al. (2026): source and target must
 share KV-head count and per-head dimension; key mappings must declare whether
 RoPE is removed before fitting; ridge regression is the mandatory linear
 baseline; calibration and final holdout identities must remain disjoint.
+
+Protocol inputs are validated at runtime and split identities are captured as
+immutable tuples. Valid identities, their order and numeric values are preserved;
+malformed types are rejected rather than silently coerced.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable
+from math import isfinite
 
 
 class TransferApplicability(str, Enum):
@@ -31,10 +35,8 @@ class KVGeometry:
     head_dim: int
 
     def __post_init__(self) -> None:
-        if self.kv_heads <= 0:
-            raise ValueError("kv_heads must be positive")
-        if self.head_dim <= 0:
-            raise ValueError("head_dim must be positive")
+        _require_positive_int("kv_heads", self.kv_heads)
+        _require_positive_int("head_dim", self.head_dim)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,8 +52,10 @@ class ModelRevision:
             ("revision", self.revision),
             ("tokenizer_revision", self.tokenizer_revision),
         ):
-            if not value.strip():
-                raise ValueError(f"{name} must be non-empty")
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if not isinstance(self.kv, KVGeometry):
+            raise ValueError("kv must be a validated KVGeometry")
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,15 +70,31 @@ class CrossModelTransferProtocol:
     final_holdout_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        if self.ridge_alpha < 0:
-            raise ValueError("ridge_alpha must be non-negative")
-        if self.source_layers_per_target <= 0:
-            raise ValueError("source_layers_per_target must be positive")
-        _require_unique_non_empty("calibration_ids", self.calibration_ids)
-        _require_unique_non_empty("final_holdout_ids", self.final_holdout_ids)
-        overlap = set(self.calibration_ids).intersection(self.final_holdout_ids)
-        if overlap:
+        for name, value in (("source", self.source), ("target", self.target)):
+            if not isinstance(value, ModelRevision):
+                raise ValueError(f"{name} must be a validated ModelRevision")
+        if not isinstance(self.mapper, MapperBaseline):
+            raise ValueError("mapper must be a MapperBaseline member")
+        if type(self.remove_rope_from_keys) is not bool:
+            raise ValueError("remove_rope_from_keys must be a bool")
+        if type(self.ridge_alpha) not in (int, float):
+            raise ValueError("ridge_alpha must be a finite non-negative number")
+        try:
+            valid_alpha = isfinite(self.ridge_alpha) and self.ridge_alpha >= 0
+        except OverflowError:
+            valid_alpha = False
+        if not valid_alpha:
+            raise ValueError("ridge_alpha must be a finite non-negative number")
+        _require_positive_int("source_layers_per_target", self.source_layers_per_target)
+
+        # Freeze exactly the sequences that are checked. A frozen dataclass alone
+        # does not protect lists supplied by the caller from subsequent mutation.
+        calibration = _freeze_ids("calibration_ids", self.calibration_ids)
+        holdout = _freeze_ids("final_holdout_ids", self.final_holdout_ids)
+        if set(calibration).intersection(holdout):
             raise ValueError("calibration_ids and final_holdout_ids must be disjoint")
+        object.__setattr__(self, "calibration_ids", calibration)
+        object.__setattr__(self, "final_holdout_ids", holdout)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,11 +128,19 @@ def assess_cross_model_transfer(protocol: CrossModelTransferProtocol) -> Transfe
     )
 
 
-def _require_unique_non_empty(name: str, values: Iterable[str]) -> None:
-    values = tuple(values)
-    if not values:
+def _require_positive_int(name: str, value: int) -> None:
+    if type(value) is not int or value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+
+
+def _freeze_ids(name: str, values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    if not isinstance(values, (list, tuple)):
+        raise ValueError(f"{name} must be a list or tuple of sample IDs")
+    snapshot = tuple(values)
+    if not snapshot:
         raise ValueError(f"{name} must be non-empty")
-    if any(not value.strip() for value in values):
-        raise ValueError(f"{name} entries must be non-empty")
-    if len(values) != len(set(values)):
+    if any(not isinstance(value, str) or not value.strip() for value in snapshot):
+        raise ValueError(f"{name} entries must be non-empty strings")
+    if len(snapshot) != len(set(snapshot)):
         raise ValueError(f"{name} must not contain duplicates")
+    return snapshot
