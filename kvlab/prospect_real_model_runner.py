@@ -1,16 +1,16 @@
 """Execute observed KV-selection experiments through an external model backend.
 
-The runner is intentionally backend-agnostic.  It sends one canonical JSON
-request per execution to an argv-style command, never through a shell.  The
-backend returns a canonical JSON response containing an opaque base64 artefact
-and explicitly named observed metrics.  KVLab hashes the decoded artefact bytes
-itself and pairs baseline/candidate metrics before constructing the existing
-``kvlab.prospect-kv-real-model-selection/v1`` evidence envelope.
+The runner is backend-agnostic. It sends one canonical JSON request per
+execution to an argv-style command, never through a shell. Protocol v2 requires
+the backend response to echo the SHA-256 of the exact canonical request plus the
+mode, policy and retained-token set it claims to have applied. KVLab validates
+that attestation before accepting any observed metric.
 
-This module provides execution plumbing, not a model implementation and not a
-performance claim.  Logical KV bytes are never converted into HBM, traffic,
-latency, throughput, or quality claims.  A selection's policy label remains
-provenance only; it does not prove that the named heuristic generated it.
+KVLab also decodes and hashes the opaque output artefact itself. These checks
+bind evidence to an exact request/response pair but do not prove the internals
+of an external runtime. Logical KV bytes are never converted into HBM, traffic,
+latency, throughput, or quality claims, and a policy label remains provenance
+rather than proof that a named heuristic generated the selection.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import json
 import math
 import re
 import subprocess
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 from .prospect_real_model_eviction import ObservedMetric
 from .prospect_real_model_selection import ProspectKvRealModelSelectionEvidenceV1
@@ -32,6 +32,8 @@ from .prospect_selection_handoff import ProspectKvSelectionHandoffV1
 
 PROSPECT_KV_BACKEND_REQUEST_SCHEMA_V1 = "kvlab.prospect-kv-backend-request/v1"
 PROSPECT_KV_BACKEND_RESPONSE_SCHEMA_V1 = "kvlab.prospect-kv-backend-response/v1"
+PROSPECT_KV_BACKEND_REQUEST_SCHEMA_V2 = "kvlab.prospect-kv-backend-request/v2"
+PROSPECT_KV_BACKEND_RESPONSE_SCHEMA_V2 = "kvlab.prospect-kv-backend-response/v2"
 
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -106,6 +108,10 @@ class BackendMetricValue:
 
 @dataclass(frozen=True, slots=True)
 class BackendObservation:
+    request_sha256: str
+    applied_mode: str
+    applied_policy: str | None
+    applied_retained_token_ids: tuple[int, ...]
     artifact_bytes: bytes
     artifact_sha256: str
     metrics: tuple[BackendMetricValue, ...]
@@ -132,6 +138,7 @@ class ExternalJsonBackend:
 
     def execute(self, request: dict[str, Any]) -> BackendObservation:
         payload = _canonical_json(request)
+        request_sha256 = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         try:
             completed = subprocess.run(
                 self.command,
@@ -148,7 +155,13 @@ class ExternalJsonBackend:
             raise ProspectKvRealModelRunnerError(
                 f"external backend exited with status {completed.returncode}"
             )
-        return _parse_backend_response(completed.stdout)
+        return _parse_backend_response(
+            completed.stdout,
+            expected_request_sha256=request_sha256,
+            expected_mode=request["mode"],
+            expected_policy=request["policy"],
+            expected_retained_token_ids=request["retained_token_ids"],
+        )
 
 
 def run_real_model_selection_campaign(
@@ -262,7 +275,7 @@ def _backend_request(
     policy: str | None,
 ) -> dict[str, Any]:
     return {
-        "schema": PROSPECT_KV_BACKEND_REQUEST_SCHEMA_V1,
+        "schema": PROSPECT_KV_BACKEND_REQUEST_SCHEMA_V2,
         "mode": "baseline" if policy is None else "candidate",
         "experiment_id": context.experiment_id,
         "run_repository_revision": context.run_repository_revision,
@@ -281,7 +294,14 @@ def _backend_request(
     }
 
 
-def _parse_backend_response(payload: str) -> BackendObservation:
+def _parse_backend_response(
+    payload: str,
+    *,
+    expected_request_sha256: str,
+    expected_mode: str,
+    expected_policy: str | None,
+    expected_retained_token_ids: Sequence[int],
+) -> BackendObservation:
     try:
         raw = json.loads(payload, parse_constant=_reject_json_constant)
     except (json.JSONDecodeError, ProspectKvRealModelRunnerError) as error:
@@ -290,10 +310,36 @@ def _parse_backend_response(payload: str) -> BackendObservation:
         raise ProspectKvRealModelRunnerError("backend response must be a JSON object")
     if _canonical_json(raw) != payload:
         raise ProspectKvRealModelRunnerError("backend response JSON must be canonical")
-    if set(raw) != {"schema", "output_artifact_base64", "metrics"}:
-        raise ProspectKvRealModelRunnerError("backend response fields do not match schema v1")
-    if raw["schema"] != PROSPECT_KV_BACKEND_RESPONSE_SCHEMA_V1:
+    expected_fields = {
+        "schema",
+        "request_sha256",
+        "applied_mode",
+        "applied_policy",
+        "applied_retained_token_ids",
+        "output_artifact_base64",
+        "metrics",
+    }
+    if set(raw) != expected_fields:
+        raise ProspectKvRealModelRunnerError("backend response fields do not match schema v2")
+    if raw["schema"] != PROSPECT_KV_BACKEND_RESPONSE_SCHEMA_V2:
         raise ProspectKvRealModelRunnerError("unsupported backend response schema")
+    if raw["request_sha256"] != expected_request_sha256:
+        raise ProspectKvRealModelRunnerError(
+            "backend response does not attest the exact request SHA-256"
+        )
+    if raw["applied_mode"] != expected_mode:
+        raise ProspectKvRealModelRunnerError("backend applied_mode does not match request")
+    if raw["applied_policy"] != expected_policy:
+        raise ProspectKvRealModelRunnerError("backend applied_policy does not match request")
+    applied_retained = _require_token_ids(
+        "applied_retained_token_ids",
+        raw["applied_retained_token_ids"],
+    )
+    if applied_retained != tuple(expected_retained_token_ids):
+        raise ProspectKvRealModelRunnerError(
+            "backend applied_retained_token_ids do not match request"
+        )
+
     encoded = raw["output_artifact_base64"]
     if not isinstance(encoded, str) or not encoded:
         raise ProspectKvRealModelRunnerError(
@@ -306,12 +352,24 @@ def _parse_backend_response(payload: str) -> BackendObservation:
     if not artifact:
         raise ProspectKvRealModelRunnerError("decoded output artefact must not be empty")
 
-    metrics_raw = raw["metrics"]
-    if not isinstance(metrics_raw, list) or not metrics_raw:
+    metrics = _parse_backend_metrics(raw["metrics"])
+    return BackendObservation(
+        request_sha256=expected_request_sha256,
+        applied_mode=expected_mode,
+        applied_policy=expected_policy,
+        applied_retained_token_ids=applied_retained,
+        artifact_bytes=artifact,
+        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+        metrics=metrics,
+    )
+
+
+def _parse_backend_metrics(raw: Any) -> tuple[BackendMetricValue, ...]:
+    if not isinstance(raw, list) or not raw:
         raise ProspectKvRealModelRunnerError("backend metrics must be a non-empty array")
     metrics: list[BackendMetricValue] = []
     seen: set[str] = set()
-    for item in metrics_raw:
+    for item in raw:
         if not isinstance(item, dict):
             raise ProspectKvRealModelRunnerError("backend metric must be an object")
         if set(item) != {"name", "kind", "unit", "preference", "value"}:
@@ -331,11 +389,7 @@ def _parse_backend_response(payload: str) -> BackendObservation:
         seen.add(metric.name)
         metrics.append(metric)
     metrics.sort(key=lambda metric: metric.name)
-    return BackendObservation(
-        artifact_bytes=artifact,
-        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
-        metrics=tuple(metrics),
-    )
+    return tuple(metrics)
 
 
 def _pair_metrics(
@@ -403,3 +457,15 @@ def _require_finite_number(name: str, value: Any) -> float:
     if not math.isfinite(converted):
         raise ProspectKvRealModelRunnerError(f"{name} must be finite")
     return converted
+
+
+def _require_token_ids(name: str, value: Any) -> tuple[int, ...]:
+    if not isinstance(value, list):
+        raise ProspectKvRealModelRunnerError(f"{name} must be an array")
+    if any(type(token_id) is not int or token_id < 0 for token_id in value):
+        raise ProspectKvRealModelRunnerError(
+            f"{name} must contain non-negative integer token ids"
+        )
+    if len(value) != len(set(value)):
+        raise ProspectKvRealModelRunnerError(f"{name} token ids must be unique")
+    return tuple(value)
