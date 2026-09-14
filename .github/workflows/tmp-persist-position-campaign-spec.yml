@@ -29,11 +29,11 @@ jobs:
               assert old_call in s
               s = s.replace(old_call, new_call, 1)
 
-              old_sig_line = '    records: Sequence[tuple[str, str, str]],\n'
-              assert old_sig_line in s
               sig_at = s.index('def _publish_atomically(')
               prefix = s[:sig_at]
               suffix = s[sig_at:]
+              old_sig_line = '    records: Sequence[tuple[str, str, str]],\n'
+              assert old_sig_line in suffix
               suffix = suffix.replace(
                   old_sig_line,
                   '    campaign_payload: str,\n' + old_sig_line,
@@ -42,10 +42,12 @@ jobs:
               s = prefix + suffix
 
               loop_marker = '        for filename, payload, _digest in records:'
-              loop_replacement = '''        (stage / "campaign.json").write_text(
-              campaign_payload, encoding="utf-8"
-          )
-              for filename, payload, _digest in records:'''
+              loop_replacement = "\n".join([
+                  '        (stage / "campaign.json").write_text(',
+                  '            campaign_payload, encoding="utf-8"',
+                  '        )',
+                  '        for filename, payload, _digest in records:',
+              ])
               assert loop_marker in s
               s = s.replace(loop_marker, loop_replacement, 1)
               source.write_text(s)
@@ -54,16 +56,20 @@ jobs:
           t = tests.read_text()
           if 'on_disk_campaign = (output / "campaign.json")' not in t:
               marker = '            on_disk_manifest = (output / "manifest.json").read_text(encoding="utf-8")'
-              replacement = '''            on_disk_campaign = (output / "campaign.json").read_text(encoding="utf-8")
-              self.assertEqual(on_disk_campaign, spec.canonical_json())
-              self.assertEqual(
-                  hashlib.sha256(on_disk_campaign.encode("utf-8")).hexdigest(),
-                  manifest.campaign_spec_sha256,
-              )
-              on_disk_manifest = (output / "manifest.json").read_text(encoding="utf-8")'''
+              replacement = "\n".join([
+                  '            on_disk_campaign = (output / "campaign.json").read_text(encoding="utf-8")',
+                  '            self.assertEqual(on_disk_campaign, spec.canonical_json())',
+                  '            self.assertEqual(',
+                  '                hashlib.sha256(on_disk_campaign.encode("utf-8")).hexdigest(),',
+                  '                manifest.campaign_spec_sha256,',
+                  '            )',
+                  '            on_disk_manifest = (output / "manifest.json").read_text(encoding="utf-8")',
+              ])
               assert marker in t
               t = t.replace(marker, replacement, 1)
               tests.write_text(t)
+      - name: Compile patched Python
+        run: python -m py_compile kvlab/prospect_real_model_campaign_v4.py tests/test_prospect_real_model_campaign_v4.py
       - name: Run focused tests
         run: python -m unittest discover -s tests -p 'test_prospect_real_model_campaign_v4.py'
       - name: Commit patch
