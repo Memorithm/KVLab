@@ -321,12 +321,13 @@ def execute_position_campaign_v4(
         evidence_schema=PROSPECT_KV_REAL_MODEL_SELECTION_SCHEMA_V2,
         records=tuple(record_manifest),
     )
-    _publish_atomically(destination, encoded_records, manifest)
+    _publish_atomically(destination, spec.canonical_json(), encoded_records, manifest)
     return manifest
 
 
 def _publish_atomically(
     destination: Path,
+    campaign_payload: str,
     records: Sequence[tuple[str, str, str]],
     manifest: PositionCampaignResultManifestV1,
 ) -> None:
@@ -336,6 +337,9 @@ def _publish_atomically(
         tempfile.mkdtemp(prefix=f".{destination.name}.tmp-", dir=str(parent))
     )
     try:
+        (stage / "campaign.json").write_text(
+            campaign_payload, encoding="utf-8"
+        )
         for filename, payload, _digest in records:
             (stage / filename).write_text(payload, encoding="utf-8")
         (stage / "manifest.json").write_text(manifest.canonical_json(), encoding="utf-8")

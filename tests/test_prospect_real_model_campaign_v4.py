@@ -128,6 +128,12 @@ class ProspectPositionCampaignV4Tests(unittest.TestCase):
             )
             self.assertEqual(backend.requests[1]["retained_positions"], [0, 2, 4])
 
+            on_disk_campaign = (output / "campaign.json").read_text(encoding="utf-8")
+            self.assertEqual(on_disk_campaign, spec.canonical_json())
+            self.assertEqual(
+                hashlib.sha256(on_disk_campaign.encode("utf-8")).hexdigest(),
+                manifest.campaign_spec_sha256,
+            )
             on_disk_manifest = (output / "manifest.json").read_text(encoding="utf-8")
             self.assertEqual(on_disk_manifest, manifest.canonical_json())
             for record in manifest.records:
