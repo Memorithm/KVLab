@@ -1,6 +1,5 @@
 import json
-
-import pytest
+import unittest
 
 from kvlab.prospect_real_model_eviction import ObservedMetric
 from kvlab.prospect_real_model_selection_v2 import (
@@ -50,22 +49,28 @@ def _evidence():
     )
 
 
-def test_position_evidence_round_trips_canonically_with_duplicate_tokens():
-    evidence = _evidence()
-    payload = evidence.canonical_json()
-    replayed = ProspectKvRealModelSelectionEvidenceV2.from_canonical_json(payload)
+class ProspectKvRealModelSelectionV2Tests(unittest.TestCase):
+    def test_position_evidence_round_trips_canonically_with_duplicate_tokens(self):
+        evidence = _evidence()
+        payload = evidence.canonical_json()
+        replayed = ProspectKvRealModelSelectionEvidenceV2.from_canonical_json(payload)
 
-    assert replayed == evidence
-    assert replayed.selection.retained_positions == (0, 2, 4)
-    assert replayed.selection.retained_token_ids == (7, 7, 19)
-    assert replayed.baseline_logical_kv_bytes == 320
-    assert replayed.candidate_logical_kv_bytes == 192
+        self.assertEqual(replayed, evidence)
+        self.assertEqual(replayed.selection.retained_positions, (0, 2, 4))
+        self.assertEqual(replayed.selection.retained_token_ids, (7, 7, 19))
+        self.assertEqual(replayed.baseline_logical_kv_bytes, 320)
+        self.assertEqual(replayed.candidate_logical_kv_bytes, 192)
+
+    def test_position_evidence_rejects_logical_byte_tampering(self):
+        raw = json.loads(_evidence().canonical_json())
+        raw["candidate_logical_kv_bytes"] += 64
+        payload = json.dumps(raw, sort_keys=True, separators=(",", ":"))
+
+        with self.assertRaisesRegex(
+            ProspectKvRealModelSelectionV2Error, "candidate logical KV bytes"
+        ):
+            ProspectKvRealModelSelectionEvidenceV2.from_canonical_json(payload)
 
 
-def test_position_evidence_rejects_logical_byte_tampering():
-    raw = json.loads(_evidence().canonical_json())
-    raw["candidate_logical_kv_bytes"] += 64
-    payload = json.dumps(raw, sort_keys=True, separators=(",", ":"))
-
-    with pytest.raises(ProspectKvRealModelSelectionV2Error, match="candidate logical KV bytes"):
-        ProspectKvRealModelSelectionEvidenceV2.from_canonical_json(payload)
+if __name__ == "__main__":
+    unittest.main()
