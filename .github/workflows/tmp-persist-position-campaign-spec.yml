@@ -43,13 +43,13 @@ jobs:
               assert old_sig in s
               s = s.replace(old_sig, new_sig, 1)
 
-              stage_marker = '''    try:
+              loop_marker = '        for filename, payload, _digest in records:'
+              loop_replacement = '''        (stage / "campaign.json").write_text(
+              campaign_payload, encoding="utf-8"
+          )
               for filename, payload, _digest in records:'''
-              stage_replacement = '''    try:
-              (stage / "campaign.json").write_text(campaign_payload, encoding="utf-8")
-              for filename, payload, _digest in records:'''
-              assert stage_marker in s
-              s = s.replace(stage_marker, stage_replacement, 1)
+              assert loop_marker in s
+              s = s.replace(loop_marker, loop_replacement, 1)
               source.write_text(s)
 
           tests = Path("tests/test_prospect_real_model_campaign_v4.py")
