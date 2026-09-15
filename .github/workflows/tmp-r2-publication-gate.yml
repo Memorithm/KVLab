@@ -71,11 +71,8 @@ jobs:
                       self.assertEqual(list(root.iterdir()), [])
 
           '''
-          # Normalize only the synthetic insertion indentation, not existing tests.
-          import textwrap
-          lines = tests.splitlines()
-          tests = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
           replace(anchor, tests + anchor)
+          compile(source, str(path), 'exec')
           path.write_text(source)
           PY
       - name: Require original launcher to reproduce missing gate
@@ -110,6 +107,7 @@ jobs:
           anchor = '            (stage / "suite-manifest.json").write_text(result.canonical_json(), encoding="utf-8")'
           replace(anchor, anchor + '\n            receipt = verify_staged_r2_suite(publication_verifier, stage, result.canonical_json())\n            # A stage-consistency receipt is not a claim that publication/model execution occurred.\n            # Preserve the frozen v1 result and strict file set; log this additional verifier separately.\n            print(canonical_json(receipt), file=sys.stderr)')
           replace('    except (SmolLm2R2SuiteError, SmolLm2R1SuiteError, OSError) as error:', '    except (SmolLm2R2SuiteError, SmolLm2R1SuiteError, PublicationGateError, OSError) as error:')
+          compile(source, str(path), 'exec')
           path.write_text(source)
           PY
           python3 -m compileall -q kvlab tests
