@@ -1,0 +1,124 @@
+name: Reproduce missing R2 publication gate and validate integration
+on:
+  push:
+    branches: [fix/r2-global-verification-before-publication]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+      - name: Add publication-order regressions to the exact reviewed tests
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          path = Path('tests/test_smollm2_r2_suite.py')
+          raw = path.read_bytes()
+          assert hashlib.sha1(f'blob {len(raw)}\0'.encode() + raw).hexdigest() == 'b3ba3beb855ced87c518016aee0a974aeaaffca8'
+          source = raw.decode()
+          def replace(old, new):
+              global source
+              assert source.count(old) == 1, old
+              source = source.replace(old, new)
+          replace('from kvlab import prospect_smollm2_r2_suite as suite', 'from kvlab import prospect_smollm2_r2_suite as suite\nfrom kvlab.prospect_r2_publication_gate import PublicationGateError')
+          replace('        return preflight, execution', '        stack.enter_context(patch.object(suite, "verify_staged_r2_suite", create=True, return_value={}))\n        return preflight, execution')
+          replace('            execution.assert_not_called()', '            execution.assert_not_called()\n            suite.verify_staged_r2_suite.assert_not_called()\n            self.assertEqual(suite._build.call_count, 3)')
+          replace('            self.assertEqual(execution.call_count, 3)', '            self.assertEqual(execution.call_count, 3)\n            suite.verify_staged_r2_suite.assert_called_once()')
+          anchor = '    def test_existing_output_and_lock_are_preserved(self):'
+          tests = '''    def test_global_gate_rejection_prevents_publication(self):
+                  with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+                      root = Path(temporary)
+                      _, execution = self._mocks(stack, self._fake_execute)
+                      with patch.object(suite, "verify_staged_r2_suite", create=True, side_effect=PublicationGateError("cross-budget baseline drift")):
+                          with self.assertRaises(PublicationGateError):
+                              suite.run_suite(**self._inputs(root))
+                      self.assertEqual(execution.call_count, 3)
+                      self.assertEqual(list(root.iterdir()), [])
+
+              def test_global_gate_runs_on_complete_stage_before_rename(self):
+                  with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+                      root = Path(temporary)
+                      _, execution = self._mocks(stack, self._fake_execute)
+                      def check(binary, stage, manifest_json):
+                          self.assertEqual(execution.call_count, 3)
+                          self.assertFalse((root / "published").exists())
+                          self.assertEqual((stage / "suite-manifest.json").read_text(), manifest_json)
+                          self.assertEqual(len(list(stage.iterdir())), 7)
+                          self.assertNotIn("publication_verifier_revision", json.loads(manifest_json))
+                          return {"phase": "stage_verified", "publication_verifier_revision": suite.PUBLICATION_VERIFIER_REVISION}
+                      captured = io.StringIO()
+                      with patch.object(suite, "verify_staged_r2_suite", side_effect=check), redirect_stderr(captured):
+                          suite.run_suite(**self._inputs(root))
+                      receipt = json.loads(captured.getvalue())
+                      self.assertEqual(receipt["phase"], "stage_verified")
+                      self.assertEqual(receipt["publication_verifier_revision"], suite.PUBLICATION_VERIFIER_REVISION)
+                      self.assertTrue((root / "published" / "suite-manifest.json").is_file())
+
+              def test_global_gate_interrupt_discards_staging_and_lock(self):
+                  with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+                      root = Path(temporary)
+                      self._mocks(stack, self._fake_execute)
+                      with patch.object(suite, "verify_staged_r2_suite", side_effect=KeyboardInterrupt()):
+                          with self.assertRaises(KeyboardInterrupt):
+                              suite.run_suite(**self._inputs(root))
+                      self.assertEqual(list(root.iterdir()), [])
+
+          '''
+          # Normalize only the synthetic insertion indentation, not existing tests.
+          import textwrap
+          lines = tests.splitlines()
+          tests = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          replace(anchor, tests + anchor)
+          path.write_text(source)
+          PY
+      - name: Require original launcher to reproduce missing gate
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          run = subprocess.run(['python3', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_smollm2_r2_suite.py', '-k', 'global_gate_rejection'], capture_output=True, text=True)
+          print(run.stdout)
+          print(run.stderr)
+          assert run.returncode == 1
+          assert 'FAILED (failures=1)' in run.stderr
+          assert 'PublicationGateError not raised' in run.stderr
+          PY
+      - name: Integrate mandatory separately pinned verifier before publication
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          path = Path('kvlab/prospect_smollm2_r2_suite.py')
+          raw = path.read_bytes()
+          assert hashlib.sha1(f'blob {len(raw)}\0'.encode() + raw).hexdigest() == '2af3fb758b628287f53087d002dfffe97477e64b'
+          source = raw.decode()
+          def replace(old, new):
+              global source
+              assert source.count(old) == 1, old
+              source = source.replace(old, new)
+          replace('from .prospect_real_model_campaign_v4 import PositionCampaignSpecV1', 'from .prospect_r2_publication_gate import (\n    PUBLICATION_VERIFIER_REVISION, PublicationGateError, verify_staged_r2_suite,\n)\nfrom .prospect_real_model_campaign_v4 import PositionCampaignSpecV1')
+          replace('        (nnis_repo, NNIS_REVISION), (prospect_repo, VERIFIER_REVISION),', '        (nnis_repo, NNIS_REVISION), (prospect_repo, VERIFIER_REVISION),\n        (prospect_repo, PUBLICATION_VERIFIER_REVISION),')
+          replace('                         (prospect_repo, VERIFIER_REVISION, "prospect"),', '                         (prospect_repo, VERIFIER_REVISION, "prospect"),\n                         (prospect_repo, PUBLICATION_VERIFIER_REVISION, "prospect-publication"),')
+          anchor = '        prospect = _build(worktrees[2], root / "prospect-target", "prospect-cli", "prospect")'
+          replace(anchor, anchor + '\n        publication_verifier = _build(\n            worktrees[3], root / "prospect-publication-target", "prospect-cli", "prospect",\n        )')
+          anchor = '            (stage / "suite-manifest.json").write_text(result.canonical_json(), encoding="utf-8")'
+          replace(anchor, anchor + '\n            receipt = verify_staged_r2_suite(publication_verifier, stage, result.canonical_json())\n            # A stage-consistency receipt is not a claim that publication/model execution occurred.\n            # Preserve the frozen v1 result and strict file set; log this additional verifier separately.\n            print(canonical_json(receipt), file=sys.stderr)')
+          replace('    except (SmolLm2R2SuiteError, SmolLm2R1SuiteError, OSError) as error:', '    except (SmolLm2R2SuiteError, SmolLm2R1SuiteError, PublicationGateError, OSError) as error:')
+          path.write_text(source)
+          PY
+          python3 -m compileall -q kvlab tests
+          python3 -m unittest discover -s tests -v
+      - name: Commit validated integration and remove preparation workflow
+        run: |
+          git config user.name 'MEMOPERF'
+          git config user.email 'contact@checkupauto.fr'
+          git add kvlab/prospect_smollm2_r2_suite.py tests/test_smollm2_r2_suite.py
+          git rm .github/workflows/tmp-r2-publication-gate.yml
+          git commit -m 'fix(prospect): require global R2 verification before suite publication'
+          git push origin HEAD:fix/r2-global-verification-before-publication
