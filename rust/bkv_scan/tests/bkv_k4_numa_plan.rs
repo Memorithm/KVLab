@@ -75,15 +75,13 @@ fn remote_memory_must_differ_from_declared_worker_node() {
         ),
         Err(NumaPlanError::RemoteNodeMatchesCpuNode { cpu_node: 0 })
     );
-    assert!(
-        NumaCase::new(
-            "node0-remote-node1",
-            vec![0, 2, 4, 6],
-            0,
-            MemoryPlacement::RemoteNode(1),
-        )
-        .is_ok()
-    );
+    assert!(NumaCase::new(
+        "node0-remote-node1",
+        vec![0, 2, 4, 6],
+        0,
+        MemoryPlacement::RemoteNode(1),
+    )
+    .is_ok());
 }
 
 #[test]
