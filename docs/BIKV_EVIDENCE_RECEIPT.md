@@ -19,6 +19,20 @@ Persisted receipts can be reconstructed only from their canonical JSON encoding.
 
 `verify_source_bytes` then checks the retained source artifact against both the recorded byte length and SHA-256. A length mismatch or same-length digest mismatch fails closed. Verification deliberately does not parse the source again and therefore cannot reinterpret or validate the producer's scientific or performance fields.
 
+## Command-line verification
+
+Use the repository tool when a retained receipt and source artifact must be checked without writing application code:
+
+```bash
+python3 tools/verify_bikv_evidence_receipt.py \
+  --receipt path/to/receipt.json \
+  --source path/to/source.json
+```
+
+On success the command exits with status `0` and prints only provenance identity fields (`schema`, producer repository and commit, source SHA-256 and byte length, and receipt SHA-256). It does not echo or interpret upstream metrics or claims.
+
+On malformed/non-canonical receipt input, unreadable files, a byte-length mismatch, or a SHA-256 mismatch, the command exits with status `2` and writes the verification failure to standard error. A failed verification is a provenance failure only; it must not be converted into a scientific or performance conclusion.
+
 ## What this contract does not establish
 
 A valid receipt does **not** validate or promote any upstream latency, bandwidth, numerical-KV traffic, model-quality, correctness, energy, resident-only execution, first-token, TPOT, or speedup claim. Those statements require their own declared evidence and qualification. The receipt only says which exact upstream bytes and producer commit KVLab retained or referenced.
