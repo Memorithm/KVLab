@@ -102,7 +102,9 @@ class BikvEvidenceBundleSourceCliTests(unittest.TestCase):
     def test_tampered_source_bytes_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             bundle_path, receipts, sources, _ = self.write_case(Path(tmp))
-            sources["flat.m13b"].write_bytes(b'{"candidate_density":0.5}')
+            # Preserve the original byte length so this exercises the digest
+            # mismatch path rather than the earlier length-mismatch guard.
+            sources["flat.m13b"].write_bytes(b'{"candidate_density":0.50}')
             completed = self.run_cli(bundle_path, receipts, sources)
 
         self.assertEqual(completed.returncode, 2)
