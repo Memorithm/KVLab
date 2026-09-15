@@ -23,8 +23,16 @@ bundle before loading any upstream artifact.
 that replay step. The command requires one canonical receipt file for every role
 in the canonical bundle, rejects missing/extra/duplicate roles, validates each
 receipt's canonical encoding, and checks the exact receipt/provenance identity
-against the bound entry. Its success output contains provenance fields only; it
-never opens or reports the upstream scientific payload.
+against the bound entry.
+
+The verifier can additionally receive `--source ROLE=PATH` for every bundle role.
+Source verification is all-or-none: supplying only a subset is rejected. For a
+complete source set, each retained artifact is checked byte-for-byte by length and
+SHA-256 against its canonical receipt after the receipt itself has been verified
+against the bundle. The source bytes are never parsed or reported; successful
+output remains provenance metadata only. Omitting `--source` preserves the
+receipt-only verification mode and is reported explicitly as
+`source_payloads_verified=false`.
 
 This supports the current BKV-K6 gate of retaining and cross-linking FLAT BIKV
 evidence (for example a K6.4 evidence envelope and an M13B.4 trace receipt) inside
@@ -33,7 +41,8 @@ KVLab provenance without turning those artifacts into KVLab measurements.
 ## Non-claims
 
 A bundle or a successful verifier run proves only provenance linkage between exact
-receipts. It does **not** validate Boolean overhead, numerical K/V bytes avoided,
-physical DRAM traffic, `numerical_KV_bytes_avoided / Boolean_KV_bytes_read`,
-first-token latency, TPOT, recall/false-negative rate, downstream O/LSE/model
-quality, energy, or speedup. Those remain target-host/model measurement gates.
+receipts and, when explicitly requested, exact retained source-byte identity. It
+does **not** validate Boolean overhead, numerical K/V bytes avoided, physical DRAM
+traffic, `numerical_KV_bytes_avoided / Boolean_KV_bytes_read`, first-token latency,
+TPOT, recall/false-negative rate, downstream O/LSE/model quality, energy, or
+speedup. Those remain target-host/model measurement gates.
