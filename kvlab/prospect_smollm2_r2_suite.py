@@ -21,6 +21,9 @@ import tempfile
 from types import MappingProxyType
 from typing import Iterator, Sequence
 
+from .prospect_r2_publication_gate import (
+    PUBLICATION_VERIFIER_REVISION, PublicationGateError, verify_staged_r2_suite,
+)
 from .prospect_real_model_campaign_v4 import PositionCampaignSpecV1
 from .prospect_position_comparison import preflight_budget_matched_campaign
 from .prospect_smollm2_r1_suite import (
@@ -230,6 +233,7 @@ def run_suite(*, kvlab_repo: Path, nnis_repo: Path, prospect_repo: Path,
     for repo, revision in (
         (kvlab_repo, PREREGISTRATION_REVISION), (kvlab_repo, EXECUTION_REVISION),
         (nnis_repo, NNIS_REVISION), (prospect_repo, VERIFIER_REVISION),
+        (prospect_repo, PUBLICATION_VERIFIER_REVISION),
     ):
         require_git_commit(repo, revision)
     require_model_artifact(model_dir)
@@ -248,9 +252,13 @@ def run_suite(*, kvlab_repo: Path, nnis_repo: Path, prospect_repo: Path,
                          (kvlab_repo, EXECUTION_REVISION, "kvlab"),
                          (nnis_repo, NNIS_REVISION, "nnis"),
                          (prospect_repo, VERIFIER_REVISION, "prospect"),
+                         (prospect_repo, PUBLICATION_VERIFIER_REVISION, "prospect-publication"),
                      )]
         nnis = _build(worktrees[1], root / "nnis-target", "nnis-cli", "nnis-kvlab-backend-v4")
         prospect = _build(worktrees[2], root / "prospect-target", "prospect-cli", "prospect")
+        publication_verifier = _build(
+            worktrees[3], root / "prospect-publication-target", "prospect-cli", "prospect",
+        )
         for campaign in campaigns:
             _preflight(python, worktrees[0], prospect, sources[campaign.retained_count])
         identity = dict(
@@ -279,6 +287,10 @@ def run_suite(*, kvlab_repo: Path, nnis_repo: Path, prospect_repo: Path,
             ) for c in campaigns)
             result = SuiteResultManifest(schema=SUITE_SCHEMA, campaigns=records, **identity)
             (stage / "suite-manifest.json").write_text(result.canonical_json(), encoding="utf-8")
+            receipt = verify_staged_r2_suite(publication_verifier, stage, result.canonical_json())
+            # A stage-consistency receipt is not a claim that publication/model execution occurred.
+            # Preserve the frozen v1 result and strict file set; log this additional verifier separately.
+            print(canonical_json(receipt), file=sys.stderr)
             if os.path.lexists(output_directory):
                 raise SmolLm2R2SuiteError("output appeared during suite execution")
             stage.rename(output_directory)
@@ -301,7 +313,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             model_dir=args.model_dir, output_directory=args.output_dir, device_ordinal=args.device,
             timeout_seconds=args.timeout_seconds, python=args.python, preflight_only=args.preflight_only,
         )
-    except (SmolLm2R2SuiteError, SmolLm2R1SuiteError, OSError) as error:
+    except (SmolLm2R2SuiteError, SmolLm2R1SuiteError, PublicationGateError, OSError) as error:
         print(str(error), file=sys.stderr)
         return 1
     print(canonical_json(result))
