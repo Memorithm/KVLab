@@ -65,6 +65,28 @@ fn local_memory_must_match_declared_worker_node() {
 }
 
 #[test]
+fn remote_memory_must_differ_from_declared_worker_node() {
+    assert_eq!(
+        NumaCase::new(
+            "bad-remote",
+            vec![0, 2, 4, 6],
+            0,
+            MemoryPlacement::RemoteNode(0),
+        ),
+        Err(NumaPlanError::RemoteNodeMatchesCpuNode { cpu_node: 0 })
+    );
+    assert!(
+        NumaCase::new(
+            "node0-remote-node1",
+            vec![0, 2, 4, 6],
+            0,
+            MemoryPlacement::RemoteNode(1),
+        )
+        .is_ok()
+    );
+}
+
+#[test]
 fn campaign_requires_evidence_commit_and_unique_case_names() {
     let case = NumaCase::new("local", vec![0], 0, MemoryPlacement::LocalNode(0)).unwrap();
     assert_eq!(
