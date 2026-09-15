@@ -22,24 +22,25 @@ class BikvEvidenceReceiptTests(unittest.TestCase):
         receipt.verify_source_bytes(payload)
 
     def test_semantically_equal_but_byte_different_sources_do_not_alias(self) -> None:
-        compact = b'{"a":1,"b":2}'
-        spaced = b'{"a": 1, "b": 2}'
+        first_encoding = b'{"a":1,"b":2}'
+        second_encoding = b'{"b":2,"a":1}'
 
         first = BikvEvidenceReceiptV1.from_json_bytes(
             producer_repo="Memorithm/FLAT-ATTENTION",
             producer_commit=FLAT_REVISION,
-            payload=compact,
+            payload=first_encoding,
         )
         second = BikvEvidenceReceiptV1.from_json_bytes(
             producer_repo="Memorithm/FLAT-ATTENTION",
             producer_commit=FLAT_REVISION,
-            payload=spaced,
+            payload=second_encoding,
         )
 
-        self.assertEqual(json.loads(compact), json.loads(spaced))
+        self.assertEqual(len(first_encoding), len(second_encoding))
+        self.assertEqual(json.loads(first_encoding), json.loads(second_encoding))
         self.assertNotEqual(first.source_sha256, second.source_sha256)
         with self.assertRaisesRegex(ValueError, "SHA-256"):
-            first.verify_source_bytes(spaced)
+            first.verify_source_bytes(second_encoding)
 
     def test_verify_source_rejects_length_mismatch_before_digest_identity(self) -> None:
         payload = b'{"schema":"example/v1"}'
