@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from kvlab import prospect_smollm2_r2_suite as suite
+from kvlab.prospect_r2_publication_gate import PublicationGateError
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -147,6 +148,7 @@ class R2SuiteTests(unittest.TestCase):
         stack.enter_context(patch.object(suite, "_build", side_effect=lambda *args: Path("/fake") / args[-1]))
         preflight = stack.enter_context(patch.object(suite, "_preflight"))
         execution = stack.enter_context(patch.object(suite, "_execute", side_effect=execute))
+        stack.enter_context(patch.object(suite, "verify_staged_r2_suite", create=True, return_value={}))
         return preflight, execution
 
     @staticmethod
@@ -170,6 +172,8 @@ class R2SuiteTests(unittest.TestCase):
             self.assertEqual(len(result["campaigns"]), 3)
             self.assertEqual(preflight.call_count, 3)
             execution.assert_not_called()
+            suite.verify_staged_r2_suite.assert_not_called()
+            self.assertEqual(suite._build.call_count, 3)
             self.assertEqual(list(root.iterdir()), [])
 
     def test_success_publishes_manifest_only_after_three_verifications(self):
@@ -178,6 +182,7 @@ class R2SuiteTests(unittest.TestCase):
             _, execution = self._mocks(stack, self._fake_execute)
             result = suite.run_suite(**self._inputs(root))
             self.assertEqual(execution.call_count, 3)
+            suite.verify_staged_r2_suite.assert_called_once()
             output = root / "published"
             actual = (output / "suite-manifest.json").read_text(encoding="utf-8")
             self.assertEqual(actual, suite.canonical_json(result))
@@ -198,6 +203,44 @@ class R2SuiteTests(unittest.TestCase):
                     with self.assertRaises(type(error)):
                         suite.run_suite(**self._inputs(root))
                     self.assertEqual(list(root.iterdir()), [])
+
+    def test_global_gate_rejection_prevents_publication(self):
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            root = Path(temporary)
+            _, execution = self._mocks(stack, self._fake_execute)
+            with patch.object(suite, "verify_staged_r2_suite", create=True, side_effect=PublicationGateError("cross-budget baseline drift")):
+                with self.assertRaises(PublicationGateError):
+                    suite.run_suite(**self._inputs(root))
+            self.assertEqual(execution.call_count, 3)
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_global_gate_runs_on_complete_stage_before_rename(self):
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            root = Path(temporary)
+            _, execution = self._mocks(stack, self._fake_execute)
+            def check(binary, stage, manifest_json):
+                self.assertEqual(execution.call_count, 3)
+                self.assertFalse((root / "published").exists())
+                self.assertEqual((stage / "suite-manifest.json").read_text(), manifest_json)
+                self.assertEqual(len(list(stage.iterdir())), 7)
+                self.assertNotIn("publication_verifier_revision", json.loads(manifest_json))
+                return {"phase": "stage_verified", "publication_verifier_revision": suite.PUBLICATION_VERIFIER_REVISION}
+            captured = io.StringIO()
+            with patch.object(suite, "verify_staged_r2_suite", side_effect=check), redirect_stderr(captured):
+                suite.run_suite(**self._inputs(root))
+            receipt = json.loads(captured.getvalue())
+            self.assertEqual(receipt["phase"], "stage_verified")
+            self.assertEqual(receipt["publication_verifier_revision"], suite.PUBLICATION_VERIFIER_REVISION)
+            self.assertTrue((root / "published" / "suite-manifest.json").is_file())
+
+    def test_global_gate_interrupt_discards_staging_and_lock(self):
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            root = Path(temporary)
+            self._mocks(stack, self._fake_execute)
+            with patch.object(suite, "verify_staged_r2_suite", side_effect=KeyboardInterrupt()):
+                with self.assertRaises(KeyboardInterrupt):
+                    suite.run_suite(**self._inputs(root))
+            self.assertEqual(list(root.iterdir()), [])
 
     def test_existing_output_and_lock_are_preserved(self):
         with tempfile.TemporaryDirectory() as temporary:
