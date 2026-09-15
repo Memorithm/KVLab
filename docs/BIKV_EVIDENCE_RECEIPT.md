@@ -13,6 +13,12 @@ The builder accepts only non-empty UTF-8 JSON with a top-level object. It parses
 
 The receipt itself has deterministic canonical JSON bytes and a separate receipt SHA-256. Source-artifact identity and receipt identity must not be conflated.
 
+## Reconstruction and exact-byte verification
+
+Persisted receipts can be reconstructed only from their canonical JSON encoding. Alternate whitespace/key ordering, missing or extra fields, unsupported schema identifiers and malformed field types are rejected rather than normalized silently.
+
+`verify_source_bytes` then checks the retained source artifact against both the recorded byte length and SHA-256. A length mismatch or same-length digest mismatch fails closed. Verification deliberately does not parse the source again and therefore cannot reinterpret or validate the producer's scientific or performance fields.
+
 ## What this contract does not establish
 
 A valid receipt does **not** validate or promote any upstream latency, bandwidth, numerical-KV traffic, model-quality, correctness, energy, resident-only execution, first-token, TPOT, or speedup claim. Those statements require their own declared evidence and qualification. The receipt only says which exact upstream bytes and producer commit KVLab retained or referenced.
