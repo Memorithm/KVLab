@@ -26,6 +26,7 @@ pub enum NumaPlanError {
     EmptyWorkerSet,
     DuplicateCpu(u32),
     NodeMismatch { cpu_node: u32, placement_node: u32 },
+    RemoteNodeMatchesCpuNode { cpu_node: u32 },
 }
 
 impl fmt::Display for NumaPlanError {
@@ -42,6 +43,10 @@ impl fmt::Display for NumaPlanError {
             } => write!(
                 f,
                 "local NUMA placement node {placement_node} does not match worker node {cpu_node}"
+            ),
+            Self::RemoteNodeMatchesCpuNode { cpu_node } => write!(
+                f,
+                "remote NUMA placement node {cpu_node} must differ from worker node {cpu_node}"
             ),
         }
     }
@@ -70,13 +75,17 @@ impl NumaCase {
                 return Err(NumaPlanError::DuplicateCpu(pair[0]));
             }
         }
-        if let MemoryPlacement::LocalNode(placement_node) = memory {
-            if placement_node != cpu_node {
+        match memory {
+            MemoryPlacement::LocalNode(placement_node) if placement_node != cpu_node => {
                 return Err(NumaPlanError::NodeMismatch {
                     cpu_node,
                     placement_node,
                 });
             }
+            MemoryPlacement::RemoteNode(placement_node) if placement_node == cpu_node => {
+                return Err(NumaPlanError::RemoteNodeMatchesCpuNode { cpu_node });
+            }
+            _ => {}
         }
         Ok(Self {
             name,
