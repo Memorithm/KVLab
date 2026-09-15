@@ -47,6 +47,7 @@ From the KVLab repository root:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_smollm2_r2*.py'
+python3 -m unittest discover -s tests -p 'test_prospect_r2_publication_gate.py'
 for budget in 07 14 20; do
   python3 -m kvlab.prospect_position_comparison \
     "experiments/prospect/smollm2-r2/retain-${budget}-of-27.json"
@@ -55,21 +56,22 @@ done
 
 ## R2 suite launcher
 
-`python3 -m kvlab.prospect_smollm2_r2_suite` uses four distinct immutable pins:
+`python3 -m kvlab.prospect_smollm2_r2_suite` uses five distinct immutable pins:
 
 | Role | Revision |
 | --- | --- |
 | Preregistered R2 JSON bytes | KVLab `216b49ae4d62ed4c4c2edfd1e88f929d0a0fd9e5` |
 | Actual v4 campaign executor | KVLab `404577ce939093767dc75d2d67de2fe3c16fa4dc` |
 | F32 NNIS backend | NNIS `091aabbb3e132627cf64716720aae530442d2a32` |
-| Locked per-campaign verifier | ProspectEngine `298acdc91682ef1d09914b6f964e8934828825c0` |
+| Historical per-campaign verifier | ProspectEngine `298acdc91682ef1d09914b6f964e8934828825c0` |
+| Additional global publication verifier | ProspectEngine `ca9685cd98f3a0a23e8c4f7e368736bb3aa28d0c` |
 
-The launcher reuses the existing worktree, streamed model hashing and subprocess
-utilities; it does not mutate R1 constants, copy model execution code, modify the
-caller's checkout, or change any preregistered JSON. Each input's exact SHA-256 is
-checked before parsing. Repository commits must already be present in the local
-clones; the launcher does not fetch or install dependencies on the user's behalf.
-Cargo may download the dependencies declared by the committed lockfiles.
+The launcher reuses the existing streamed model hashing and subprocess utilities;
+it does not mutate R1 constants, copy model execution code, modify the caller's
+checkout, or change any preregistered JSON. Each input's exact SHA-256 is checked
+before parsing. Repository commits must already be present in the local clones;
+the launcher does not fetch or install dependencies on the user's behalf. Cargo
+may download the dependencies declared by the committed lockfiles.
 
 Install the explicit toolchain first:
 
@@ -89,30 +91,39 @@ python3 -m kvlab.prospect_smollm2_r2_suite \
   --preflight-only
 ```
 
-Preflight verifies commits and the local model digest, builds both binaries with
-Rust 1.89 and `--locked --release`, and runs both pinned input verifiers against
-all three campaign files. It does not invoke the NNIS backend, initialize CUDA,
-create an observed result, or create the requested output directory. A successful
-preflight has schema `kvlab.smollm2-r2-position-suite-preflight/v1`.
+Preflight verifies commits and the local model digest, builds all three binaries
+with Rust 1.89 and `--locked --release`, and runs the two pinned input verifiers
+against all three campaign files. It does not invoke the NNIS backend, initialize
+CUDA, create an observed result, run global observed-suite verification, or create
+the requested output directory. The compatible preflight schema remains
+`kvlab.smollm2-r2-position-suite-preflight/v1`.
 
 Removing `--preflight-only` explicitly requests actual CUDA model execution. The
 existing pinned executor runs one baseline and two candidates per budget. Each
-complete campaign directory is independently checked by the pinned ProspectEngine
-binary; the launcher then checks the exact input identities, positions and budgets
-in its returned summary. Only after all three succeed is the staged suite renamed
-to the new output directory. Python import selection uses the pinned worktree as
-its working directory and ignores inherited Python path/home and user-site settings.
+complete campaign directory is independently checked by the historical pinned
+ProspectEngine binary; the launcher also checks exact input identities, positions
+and budgets in the returned summary. After writing the full suite manifest it
+must pass the additional `verify-kv-campaign-suite-r2` check, including common
+baseline agreement across budgets, before the staged suite can be renamed to the
+new output directory. There is no global-verification bypass flag.
 
-The result schema is `kvlab.smollm2-r2-position-suite-result/v1`. It preserves the
-per-campaign directories, verification summaries and `suite-manifest.json`.
-Diagnostics are written to stderr; stdout is reserved for the final JSON response.
-Errors and interrupts remove the staged result. Existing output entries, including
-dangling symlinks, are rejected. A cooperative sibling-directory lock prevents two
-launches from using the same destination. The parent directory must be trusted;
+The result schema remains `kvlab.smollm2-r2-position-suite-result/v1`. It preserves
+the per-campaign directories, verification summaries and `suite-manifest.json`.
+The historical verifier field in that manifest is not replaced. Diagnostics and
+the additional global-check receipt are written to stderr; stdout is reserved for
+the original final JSON response. Preserve the log outside the strict suite file
+set. A `stage_verified` receipt is not an assertion that final publication or a
+GPU execution has been independently authenticated.
+
+Errors, global-verification rejection and interrupts remove the staged result.
+Existing output entries, including dangling symlinks, are rejected. A cooperative
+sibling-directory lock prevents two launches from using the same destination.
+Python execution uses the pinned worktree and ignores inherited Python path/home
+and user-site settings. The binary and directories must be trusted and unmodified;
 this is neither an adversarial filesystem sandbox nor a power-loss durability claim.
 
 The fixed `prospect_smollm2_r1_suite` launcher and
 `prospect verify-kv-campaign-suite` remain R1-only. R2 results must not be relabelled
-as R1. The R2 launcher uses the generic `prospect verify-kv-campaign` for each budget;
-a dedicated independent R2 whole-suite consumer is a separate integration step.
-Mocked orchestration tests are not model executions or measured quality evidence.
+as R1. See [the publication gate contract](../../../docs/PROSPECT-R2-PUBLICATION-GATE.md)
+for separate verifier provenance, failure handling and receipt limits. Mocked or
+synthetic integration tests are not model executions or measured quality evidence.
