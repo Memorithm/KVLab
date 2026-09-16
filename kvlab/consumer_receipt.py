@@ -119,6 +119,31 @@ class BikvConsumerReceiptV1:
 
         return handoff.schema == self.handoff_schema and _handoff_digest(handoff) == self.handoff_sha256
 
+    def verifies_exchange(
+        self,
+        handoff: ProspectBkvHandoffV1,
+        *,
+        producer_repository: str,
+        producer_revision: str,
+        consumer_repository: str,
+        consumer_revision: str,
+        consumer_evidence_schema: str,
+    ) -> bool:
+        """Verify the payload and every declared endpoint identity exactly.
+
+        This is deliberately a provenance predicate. It does not inspect or
+        validate any scientific result emitted by the consumer.
+        """
+
+        return (
+            self.verifies_handoff(handoff)
+            and self.producer_repository == producer_repository
+            and self.producer_revision == producer_revision
+            and self.consumer_repository == consumer_repository
+            and self.consumer_revision == consumer_revision
+            and self.consumer_evidence_schema == consumer_evidence_schema
+        )
+
     def canonical_json(self) -> str:
         return json.dumps(
             {
