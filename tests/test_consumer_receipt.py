@@ -43,6 +43,40 @@ class BikvConsumerReceiptTests(unittest.TestCase):
         self.assertEqual(receipt.consumer_revision, PROSPECT_REVISION)
         self.assertTrue(receipt.verifies_handoff(self.handoff()))
 
+    def test_exact_exchange_verification_binds_all_endpoint_identity(self) -> None:
+        self.assertTrue(
+            self.receipt().verifies_exchange(
+                self.handoff(),
+                producer_repository="Memorithm/KVLab",
+                producer_revision=KVLAB_REVISION,
+                consumer_repository="Memorithm/ProspectEngine",
+                consumer_revision=PROSPECT_REVISION,
+                consumer_evidence_schema=FLAT_EVIDENCE_SCHEMA,
+            )
+        )
+
+    def test_exact_exchange_verification_fails_closed_on_each_identity_drift(self) -> None:
+        receipt = self.receipt()
+        common = {
+            "producer_repository": "Memorithm/KVLab",
+            "producer_revision": KVLAB_REVISION,
+            "consumer_repository": "Memorithm/ProspectEngine",
+            "consumer_revision": PROSPECT_REVISION,
+            "consumer_evidence_schema": FLAT_EVIDENCE_SCHEMA,
+        }
+        mutations = {
+            "producer_repository": "Memorithm/OtherLab",
+            "producer_revision": "1" * 40,
+            "consumer_repository": "Memorithm/FLAT-ATTENTION",
+            "consumer_revision": "2" * 40,
+            "consumer_evidence_schema": "different-evidence/v1",
+        }
+        for field, changed in mutations.items():
+            with self.subTest(field=field):
+                actual = dict(common)
+                actual[field] = changed
+                self.assertFalse(receipt.verifies_exchange(self.handoff(), **actual))
+
     def test_canonical_json_round_trip_is_exact(self) -> None:
         receipt = self.receipt()
         payload = receipt.canonical_json()
@@ -78,6 +112,16 @@ class BikvConsumerReceiptTests(unittest.TestCase):
         )
 
         self.assertFalse(receipt.verifies_handoff(changed))
+        self.assertFalse(
+            receipt.verifies_exchange(
+                changed,
+                producer_repository="Memorithm/KVLab",
+                producer_revision=KVLAB_REVISION,
+                consumer_repository="Memorithm/ProspectEngine",
+                consumer_revision=PROSPECT_REVISION,
+                consumer_evidence_schema=FLAT_EVIDENCE_SCHEMA,
+            )
+        )
 
 
 if __name__ == "__main__":
