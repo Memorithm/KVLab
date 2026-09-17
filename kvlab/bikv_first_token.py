@@ -158,9 +158,15 @@ class BikvK8FirstTokenObservationV1:
         """Return exact logical avoided/read byte ratio, or ``None`` at zero denominator.
 
         This ratio is logical packed-payload accounting. It is not a physical
-        DRAM-bandwidth, allocator-residency or transfer measurement.
+        DRAM-bandwidth, allocator-residency or transfer measurement. Canonical
+        v1 records historically permit a zero Boolean-byte denominator, so that
+        retained case remains an undefined ratio rather than being reclassified
+        as invalid by the stricter typed evidence helper introduced later.
         """
 
+        self.validate()
+        if self.boolean_kv_bytes_read == 0:
+            return None
         return self.traffic_evidence().numerical_bytes_avoided_per_boolean_byte
 
     def canonical_json(self) -> str:
