@@ -200,6 +200,8 @@ Qualification requires real trace/timing evidence of overlap and explicit accoun
 
 ### BKV-K7 — Portable GPU Boolean KV search
 
+Qualified producer integration (2026-09-17): FLAT-ATTENTION PR #255 passed its exact-head CI and material review and was squash-merged as `4a9a7cb065b067ecbdfecd3f03041e51971e856b`. KVLab consumes canonical `flat.boolean-kv-wgpu-parity.v1` evidence only when `execution.source_revision` matches that exact merge revision, retains exact packed inputs and CPU/WGPU candidate sets, preserves mismatches as negative evidence, and blocks any performance comparison unless the sets match exactly. This is a correctness/provenance gate only; no GPU performance or physical-traffic result is implied.
+
 Through FLAT-ATTENTION, compare the same Boolean index semantics on WGPU.
 
 The CPU and GPU paths must produce matching candidate sets for identical frozen inputs/policies before performance comparison.
