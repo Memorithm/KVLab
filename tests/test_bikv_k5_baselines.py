@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from fractions import Fraction
 
 from kvlab.bikv_k5_baselines import (
@@ -45,6 +46,11 @@ class BikvK5MatchedDensityBaselineTests(unittest.TestCase):
         self.assertEqual(seed_8.random_matched_pages(), (2, 3, 11, 26, 28, 29))
         self.assertEqual(seed_7.positional_matched_pages(), (26, 27, 28, 29, 30, 31))
         self.assertEqual(seed_b1c5.random_matched_pages(), (0, 2, 3))
+
+    def test_full_density_shortcuts_ranking(self) -> None:
+        plan = BikvK5MatchedDensityBaselines(4, (0, 1, 2, 3), 17)
+        with patch("kvlab.bikv_k5_baselines._splitmix64", side_effect=AssertionError):
+            self.assertEqual(plan.random_matched_pages(), (0, 1, 2, 3))
 
     def test_zero_density_and_empty_cache_are_explicit(self) -> None:
         empty_selection = BikvK5MatchedDensityBaselines(5, (), 0)

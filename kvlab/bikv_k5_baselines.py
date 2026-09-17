@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
+from heapq import nsmallest
 
 
 _MASK64 = (1 << 64) - 1
@@ -111,11 +112,14 @@ class BikvK5MatchedDensityBaselines:
         count = self.selected_count
         if count == 0:
             return ()
-        ranked = sorted(
+        if count == self.total_pages:
+            return self.full_pages()
+        ranked = nsmallest(
+            count,
             range(self.total_pages),
             key=lambda page: (_splitmix64(self.seed ^ page), page),
         )
-        return tuple(sorted(ranked[:count]))
+        return tuple(sorted(ranked))
 
     def positional_matched_pages(self) -> tuple[int, ...]:
         """Return the latest-page tail window at exactly the matched density."""
