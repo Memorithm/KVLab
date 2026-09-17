@@ -48,6 +48,12 @@ Any non-instrumented quantity must be labelled as an estimate. No result may be 
 
 Pairs that degrade, fail numerical checks, violate geometry prerequisites, or lose downstream quality remain in the result registry. Negative outcomes must not be removed from reports or replaced by a different pair after seeing holdout results.
 
+## Implemented calibration infrastructure
+
+The protocol gate is now backed by immutable capture manifests, exact replay validation, protocol/capture binding, and a deterministic calibration-only ridge baseline. `kvlab.k9_rope` adds a fail-closed binary64 reference for removing **declared standard RoPE** from keys under either an interleaved-pair or half-split coordinate layout. The caller must declare `theta_base`, rotary dimension, layout, and token position; the implementation does not infer model semantics. Each reference normalization can emit a content-addressed record binding input/output binary64 values and the normalization-spec fingerprint.
+
+This reference is not evidence that a particular model uses either layout or unscaled standard RoPE, and it is not a native-dtype/backend qualification. A concrete model adapter must pin and verify its actual RoPE implementation against this oracle before calibration evidence is admitted.
+
 ## Next implementation slice
 
-After this protocol gate is green in CI, add an oracle-backed capture/replay adapter for one pinned compatible model-family pair, then implement RoPE key normalization and ridge fitting against calibration data. Final holdout execution remains blocked until the concrete thresholds and dataset identities are committed.
+Bind one preregistered compatible source→target model-family pair to an oracle-backed extractor that proves its actual key layout/scaling semantics and emits the existing capture/replay records plus the new normalization records. Then bind ridge fitting to those prepared calibration rows. Final holdout execution remains blocked until the concrete thresholds and dataset identities are committed.

@@ -29,8 +29,13 @@ tests/    executable checks
 ## Priority research programmes
 
 - [Boolean KV Cache — first-class memory-tier roadmap](docs/BOOLEAN_KV_CACHE_ROADMAP.md)
+- [K9 cross-model KV transfer — preregistered reproduction track](docs/K9_CROSS_MODEL_TRANSFER_PREREGISTRATION.md)
 - [KV Tiering + Replay Study — Preregistration](docs/KV-TIERING-REPLAY-PREREGISTRATION.md)
 - [Conjecture Research Programme](docs/CONJECTURE-RESEARCH-PROGRAMME.md)
+
+### K9 cross-model transfer
+
+The K9 reproduction track now has frozen compatibility/holdout gates, immutable capture and replay contracts, protocol binding, a deterministic calibration-only ridge baseline, and a fail-closed standard-RoPE removal oracle in `kvlab.k9_rope`. The RoPE oracle supports only explicitly declared interleaved-pair or half-split coordinate layouts with caller-pinned base, rotary dimension and token position; it does not infer model semantics or authorize final-holdout execution. A concrete source→target family pair still needs immutable model/tokenizer revisions, verified actual RoPE/scaling semantics, dataset identities and preregistered acceptance thresholds before any final result can exist.
 
 ### Boolean KV Cache
 
