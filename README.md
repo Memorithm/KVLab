@@ -80,6 +80,8 @@ The companion `kvlab.bikv-target-paired-summary.v1` surface now verifies those r
 
 The preregistration boundary is now explicit through `kvlab.bikv-target-analysis-plan.v1` (`docs/BKV-K6-ANALYSIS-PLAN.md`). It content-addresses the protocol-bound H0/H1, primary performance metric and direction, minimum effect, quality noninferiority guard, uncertainty method, complete-pair requirement, multiplicity policy and holdout policy before outcome inspection. The contract does not choose campaign thresholds or evaluate outcomes; BKV-K9 remains blocked until a concrete plan is frozen before target measurements and a later evaluator applies it without tuning.
 
+The next fail-closed layer is now implemented as `kvlab.bikv-target-decision-plan.v2` plus `kvlab.bikv-target-decision.v1` (`docs/BKV-K6-DECISION-EVALUATOR.md`). It freezes the previously implicit paired effect statistic and interval convention, requires explicit candidate-side recall/FNR/O/LSE/reset guards, rebuilds the paired summary from retained runs, and records pass, negative, or incomplete-evidence dispositions without opening BKV-K9. No concrete target-host/model outcome is added by this evaluator infrastructure.
+
 ## Canon
 
 See `Memorithm/scirust-hub` `CATALOG.md` and ADR-0020. Existing preregistrations remain authoritative for their campaigns. New Boolean KV experiments must be preregistered under the dedicated roadmap before confirmatory runs; the new programme extends KVLab rather than redesigning or duplicating it.
