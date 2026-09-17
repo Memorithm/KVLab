@@ -43,7 +43,7 @@ class FlatBooleanKvSelectionCliTests(unittest.TestCase):
         self.assertEqual(output["boolean_key_bytes_read"], 24)
         self.assertEqual(
             output["flat_reference_revision"],
-            "dab6704f4c97c15147227ca586fa7c2f8dc26a4d",
+            "315716b1bf6c42cf5439b351aa9c1c3e7a1644ba",
         )
         self.assertEqual(len(output["selection_sha256"]), 64)
         self.assertNotIn("speedup", output)

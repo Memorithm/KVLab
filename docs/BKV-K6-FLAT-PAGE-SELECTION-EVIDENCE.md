@@ -3,9 +3,9 @@
 Status: consumer contract only; no benchmark or performance conclusion.
 
 FLAT-ATTENTION owns the Boolean KV page router. KVLab owns the retained evidence
-and experimental interpretation. The producer candidate currently emits
-`flat.boolean-kv-selection.v1` from its transparent `BooleanIndexedKvSelection`
-record.
+and experimental interpretation. The qualified FLAT #250 producer, merged as
+`315716b1bf6c42cf5439b351aa9c1c3e7a1644ba`, emits `flat.boolean-kv-selection.v1`
+from its transparent `BooleanIndexedKvSelection` record.
 
 KVLab accepts only the exact canonical byte encoding from the pinned producer
 revision. It verifies the producer's FNV-1a checksum, strict logical-page order,
@@ -19,7 +19,6 @@ logical/storage accounting only. Neither FLAT nor KVLab may reinterpret
 `avoided_numerical_kv_bytes` as measured DRAM, cache-line, PCIe or HBM traffic,
 and the record contains no latency, model-quality, residency or speedup claim.
 
-Until FLAT PR #250 is exact-head green and merged, the KVLab consumer remains a
-candidate pinned to its source head SHA and must not be promoted as final
-cross-repository provenance. After merge, repin the consumer to the FLAT merge
-SHA and requalify its own exact head.
+KVLab is pinned to the qualified FLAT #250 merge SHA above. This consumer still
+requires its own exact-head KVLab qualification before promotion or merge; the
+producer merge does not itself qualify this downstream implementation.

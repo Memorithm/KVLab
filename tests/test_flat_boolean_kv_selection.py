@@ -30,7 +30,7 @@ class FlatBooleanKvSelectionTests(unittest.TestCase):
         self.assertEqual(len(selection.selection_sha256()), 64)
         self.assertEqual(
             FLAT_BOOLEAN_KV_SELECTION_REFERENCE_REVISION,
-            "dab6704f4c97c15147227ca586fa7c2f8dc26a4d",
+            "315716b1bf6c42cf5439b351aa9c1c3e7a1644ba",
         )
         self.assertEqual([page.logical_page for page in selection.selected_pages], [1, 2])
 

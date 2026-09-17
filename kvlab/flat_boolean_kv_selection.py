@@ -17,7 +17,7 @@ from typing import Any
 
 FLAT_BOOLEAN_KV_SELECTION_SCHEMA = "flat.boolean-kv-selection.v1"
 FLAT_BOOLEAN_KV_SELECTION_REFERENCE_REVISION = (
-    "dab6704f4c97c15147227ca586fa7c2f8dc26a4d"
+    "315716b1bf6c42cf5439b351aa9c1c3e7a1644ba"
 )
 _U64_MAX = (1 << 64) - 1
 _TOP_FIELDS = (
