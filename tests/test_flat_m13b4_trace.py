@@ -24,6 +24,14 @@ FLAT_REFERENCE_FIXTURE = (
     b'{"kind":"output_ready","timestamp_ns":31}]}'
 )
 
+PREFILL_FIXTURE = (
+    b'{"schema":"flat.m13b4-trace.v1","timing_source":"host_wall_clock",'
+    b'"scheduling_variant":"serial_matched","scope":"prefill","events":['
+    b'{"kind":"numerical_kv_commit","timestamp_ns":100},'
+    b'{"kind":"boolean_signature_commit","timestamp_ns":110},'
+    b'{"kind":"decode_visible","timestamp_ns":120}]}'
+)
+
 
 class FlatM13B4TraceTests(unittest.TestCase):
     def parse_reference(self) -> FlatM13B4TraceV1:
@@ -101,21 +109,47 @@ class FlatM13B4TraceTests(unittest.TestCase):
         self.assertEqual(trace.canonical_json_bytes(), payload)
 
     def test_prefill_requires_boolean_and_numerical_commit_visibility(self) -> None:
-        payload = (
-            b'{"schema":"flat.m13b4-trace.v1","timing_source":"host_wall_clock",'
-            b'"scheduling_variant":"serial_matched","scope":"prefill","events":['
-            b'{"kind":"numerical_kv_commit","timestamp_ns":100},'
-            b'{"kind":"boolean_signature_commit","timestamp_ns":110},'
-            b'{"kind":"decode_visible","timestamp_ns":120}]}'
-        )
-        trace = FlatM13B4TraceV1.from_canonical_json_bytes(payload)
-        self.assertEqual(trace.canonical_json_bytes(), payload)
+        trace = FlatM13B4TraceV1.from_canonical_json_bytes(PREFILL_FIXTURE)
+        self.assertEqual(trace.canonical_json_bytes(), PREFILL_FIXTURE)
 
-        parsed = json.loads(payload)
-        parsed["events"] = [event for event in parsed["events"] if event["kind"] != "boolean_signature_commit"]
+        parsed = json.loads(PREFILL_FIXTURE)
+        parsed["events"] = [
+            event
+            for event in parsed["events"]
+            if event["kind"] != "boolean_signature_commit"
+        ]
         missing = json.dumps(parsed, separators=(",", ":")).encode("utf-8")
         with self.assertRaisesRegex(FlatM13B4TraceError, "missing required"):
             FlatM13B4TraceV1.from_canonical_json_bytes(missing)
+
+    def test_prefill_rejects_incomplete_synchronization_pair(self) -> None:
+        parsed = json.loads(PREFILL_FIXTURE)
+        parsed["events"].append(
+            {"kind": "synchronization_wait_start", "timestamp_ns": 121}
+        )
+        payload = json.dumps(parsed, separators=(",", ":")).encode("utf-8")
+        with self.assertRaisesRegex(FlatM13B4TraceError, "complete pair"):
+            FlatM13B4TraceV1.from_canonical_json_bytes(payload)
+
+    def test_prefill_multi_dispatch_requires_explicit_synchronization(self) -> None:
+        parsed = json.loads(PREFILL_FIXTURE)
+        parsed["scheduling_variant"] = "multi_dispatch_overlap_candidate"
+        payload = json.dumps(parsed, separators=(",", ":")).encode("utf-8")
+        with self.assertRaisesRegex(FlatM13B4TraceError, "explicit synchronization"):
+            FlatM13B4TraceV1.from_canonical_json_bytes(payload)
+
+    def test_prefill_multi_dispatch_accepts_complete_sync_pair(self) -> None:
+        parsed = json.loads(PREFILL_FIXTURE)
+        parsed["scheduling_variant"] = "multi_dispatch_overlap_candidate"
+        parsed["events"].extend(
+            [
+                {"kind": "synchronization_wait_start", "timestamp_ns": 121},
+                {"kind": "synchronization_wait_end", "timestamp_ns": 122},
+            ]
+        )
+        payload = json.dumps(parsed, separators=(",", ":")).encode("utf-8")
+        trace = FlatM13B4TraceV1.from_canonical_json_bytes(payload)
+        self.assertEqual(trace.canonical_json_bytes(), payload)
 
 
 if __name__ == "__main__":
