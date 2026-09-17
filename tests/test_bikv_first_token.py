@@ -4,6 +4,7 @@ from fractions import Fraction
 import json
 import unittest
 
+from kvlab.bikv_traffic import LOGICAL_PACKED_PAYLOAD
 from kvlab.bikv_first_token import (
     BKV_K8_OBSERVATION_SCHEMA_V1,
     BikvFirstTokenObservationError,
@@ -38,6 +39,7 @@ class BikvFirstTokenObservationTests(unittest.TestCase):
         decoded = BikvK8FirstTokenObservationV1.from_canonical_json(encoded)
         self.assertEqual(decoded, observation)
         self.assertEqual(decoded.numerical_to_boolean_bytes_ratio(), Fraction(16, 1))
+        self.assertEqual(decoded.traffic_evidence().evidence_kind, LOGICAL_PACKED_PAYLOAD)
         self.assertEqual(len(decoded.observation_sha256()), 64)
 
     def test_zero_boolean_bytes_has_no_defined_ratio(self) -> None:

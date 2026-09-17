@@ -16,6 +16,8 @@ import json
 import re
 from typing import Any
 
+from .bikv_traffic import LOGICAL_PACKED_PAYLOAD, BikvTrafficEvidence
+
 
 BKV_K8_OBSERVATION_SCHEMA_V1 = "kvlab.bkv-k8-first-token-observation.v1"
 _TIMING_SOURCES = frozenset({"host_wall_clock", "device_timestamp"})
@@ -133,17 +135,33 @@ class BikvK8FirstTokenObservationV1:
                 "first-token Boolean routing cannot claim readiness with historical signature rebuilds"
             )
 
-    def numerical_to_boolean_bytes_ratio(self) -> Fraction | None:
-        """Return exact logical avoided/read byte ratio, or ``None`` at zero denominator.
+    def traffic_evidence(self) -> BikvTrafficEvidence:
+        """Bind the v1 byte fields to their declared logical-payload semantics.
 
-        This ratio is logical accounting. It is not a physical DRAM-bandwidth or
-        transfer measurement.
+        The v1 schema predates the generic typed traffic-evidence contract, but
+        its byte-ratio documentation has always declared logical accounting.
+        Converting through this method makes that evidence kind executable
+        without changing the canonical v1 JSON schema.
         """
 
         self.validate()
-        if self.boolean_kv_bytes_read == 0:
-            return None
-        return Fraction(self.numerical_kv_bytes_avoided, self.boolean_kv_bytes_read)
+        evidence = BikvTrafficEvidence(
+            numerical_kv_bytes_avoided=self.numerical_kv_bytes_avoided,
+            numerical_evidence_kind=LOGICAL_PACKED_PAYLOAD,
+            boolean_kv_bytes_read=self.boolean_kv_bytes_read,
+            boolean_evidence_kind=LOGICAL_PACKED_PAYLOAD,
+        )
+        evidence.validate()
+        return evidence
+
+    def numerical_to_boolean_bytes_ratio(self) -> Fraction | None:
+        """Return exact logical avoided/read byte ratio, or ``None`` at zero denominator.
+
+        This ratio is logical packed-payload accounting. It is not a physical
+        DRAM-bandwidth, allocator-residency or transfer measurement.
+        """
+
+        return self.traffic_evidence().numerical_bytes_avoided_per_boolean_byte
 
     def canonical_json(self) -> str:
         """Return deterministic JSON for content-addressed retention."""
