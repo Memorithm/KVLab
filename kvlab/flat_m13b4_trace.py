@@ -1,10 +1,12 @@
 """Fail-closed consumer for FLAT-ATTENTION M13B.4 trace evidence.
 
 KVLab owns measurement/evidence interpretation for the Boolean KV programme, while
-FLAT-ATTENTION owns the producer-side M13B.4 trace contract.  This module accepts
+FLAT-ATTENTION owns the producer-side M13B.4 trace contract. This module accepts
 only the canonical ``flat.m13b4-trace.v1`` byte encoding emitted by the pinned
-FLAT producer revision and mirrors its structural/order validation without
-inferring overlap, concurrency, traffic, latency improvement, or quality.
+FLAT producer revision. It mirrors the producer's structural/order validation and
+adds a stricter evidence-consumer rule that synchronization evidence must always
+be complete when present and must be explicit for any multi-dispatch candidate.
+It never infers overlap, concurrency, traffic, latency improvement, or quality.
 """
 
 from __future__ import annotations
@@ -65,7 +67,7 @@ _DECODE_REQUIRED = (
 
 
 class FlatM13B4TraceError(ValueError):
-    """Raised when producer evidence does not satisfy the pinned FLAT contract."""
+    """Raised when producer evidence does not satisfy the KVLab consumer gate."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +88,7 @@ class FlatM13B4TraceEventV1:
 
 @dataclass(frozen=True, slots=True)
 class FlatM13B4TraceV1:
-    """Canonical, producer-owned M13B.4 trace retained by KVLab as evidence."""
+    """Canonical producer-owned M13B.4 trace retained by KVLab as evidence."""
 
     schema: str
     timing_source: str
@@ -95,7 +97,7 @@ class FlatM13B4TraceV1:
     events: tuple[FlatM13B4TraceEventV1, ...]
 
     def validate(self) -> None:
-        """Mirror the producer's fail-closed structural and event-order contract."""
+        """Apply producer invariants plus KVLab's stricter sync completeness gate."""
 
         if self.schema != FLAT_M13B4_TRACE_SCHEMA:
             raise FlatM13B4TraceError(f"unsupported trace schema: {self.schema!r}")
@@ -128,6 +130,8 @@ class FlatM13B4TraceV1:
             timestamps[event.kind] = event.timestamp_ns
             previous_ns = event.timestamp_ns
 
+        self._validate_synchronization(timestamps)
+
         if self.scope == "prefill":
             numerical = self._required_timestamp(timestamps, "numerical_kv_commit")
             boolean = self._required_timestamp(timestamps, "boolean_signature_commit")
@@ -150,13 +154,7 @@ class FlatM13B4TraceV1:
 
         wait_start = timestamps.get("synchronization_wait_start")
         wait_end = timestamps.get("synchronization_wait_end")
-        if (wait_start is None) != (wait_end is None):
-            raise FlatM13B4TraceError("synchronization wait evidence must be a complete pair")
         if wait_start is not None and wait_end is not None:
-            if wait_start > wait_end:
-                raise FlatM13B4TraceError(
-                    "synchronization_wait_start must not follow synchronization_wait_end"
-                )
             query_ready = self._required_timestamp(timestamps, "query_representation_ready")
             output_ready = self._required_timestamp(timestamps, "output_ready")
             if wait_start < query_ready:
@@ -167,7 +165,20 @@ class FlatM13B4TraceV1:
                 raise FlatM13B4TraceError(
                     "synchronization_wait_end must not follow output_ready"
                 )
-        elif self.scheduling_variant == "multi_dispatch_overlap_candidate":
+
+    def _validate_synchronization(self, timestamps: dict[str, int]) -> None:
+        wait_start = timestamps.get("synchronization_wait_start")
+        wait_end = timestamps.get("synchronization_wait_end")
+        if (wait_start is None) != (wait_end is None):
+            raise FlatM13B4TraceError("synchronization wait evidence must be a complete pair")
+        if wait_start is not None and wait_end is not None and wait_start > wait_end:
+            raise FlatM13B4TraceError(
+                "synchronization_wait_start must not follow synchronization_wait_end"
+            )
+        if (
+            wait_start is None
+            and self.scheduling_variant == "multi_dispatch_overlap_candidate"
+        ):
             raise FlatM13B4TraceError(
                 "multi-dispatch candidate requires explicit synchronization evidence"
             )
