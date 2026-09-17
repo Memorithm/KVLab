@@ -10,10 +10,16 @@ import unittest
 from kvlab.bikv_evidence_bundle import BikvEvidenceBundleV1
 from kvlab.bikv_evidence_receipt import BikvEvidenceReceiptV1
 from kvlab.bikv_first_token import BikvFirstTokenObservationError
+from kvlab.bikv_first_token_campaign import (
+    BKV_K8_CAMPAIGN_BINDING_SCHEMA_V1,
+    BikvK8CampaignBindingError,
+    BikvK8FirstTokenCampaignBindingV1,
+)
 from kvlab.bikv_first_token_v2 import (
     BKV_K8_OBSERVATION_SCHEMA_V2,
     BikvK8FirstTokenObservationV2,
 )
+from kvlab.bikv_target_campaign import BikvTargetCampaignV1
 from kvlab.bikv_target_protocol import (
     BASELINE_FULL_CACHE_NATIVE_PREFILL,
     BKV_TARGET_PROTOCOL_SCHEMA_V1,
@@ -132,6 +138,17 @@ def _run(protocol: BikvTargetProtocolV1, observation: BikvK8FirstTokenObservatio
     }
     values.update(changes)
     return BikvTargetRunV1(**values)  # type: ignore[arg-type]
+
+
+def _campaign_runs(
+    protocol: BikvTargetProtocolV1, observation: BikvK8FirstTokenObservationV2
+) -> tuple[BikvTargetRunV1, ...]:
+    return (
+        _run(protocol, observation, attempt_id="baseline-seed1-r0", variant="baseline", repetition_index=0),
+        _run(protocol, observation),
+        _run(protocol, observation, attempt_id="baseline-seed1-r1", variant="baseline", repetition_index=1),
+        _run(protocol, observation, attempt_id="candidate-seed1-r1", repetition_index=1),
+    )
 
 
 class BikvFirstTokenProtocolBindingTests(unittest.TestCase):
@@ -334,6 +351,117 @@ class BikvFirstTokenProtocolBindingTests(unittest.TestCase):
             )
             self.assertEqual(completed.returncode, 2)
             self.assertIn("timing source", completed.stderr)
+
+    def test_campaign_binding_requires_complete_retained_campaign_payloads(self) -> None:
+        bundle = _bundle()
+        protocol = _protocol(bundle)
+        observation = _observation(bundle)
+        runs = _campaign_runs(protocol, observation)
+        campaign = BikvTargetCampaignV1.from_runs(protocol=protocol, runs=runs)
+        candidate_run = runs[1]
+
+        binding = BikvK8FirstTokenCampaignBindingV1.from_evidence(
+            evidence_bundle=bundle,
+            protocol=protocol,
+            campaign=campaign,
+            retained_runs=runs,
+            candidate_run=candidate_run,
+            observation=observation,
+        )
+        self.assertEqual(binding.schema, BKV_K8_CAMPAIGN_BINDING_SCHEMA_V1)
+        self.assertEqual(binding.campaign_sha256, campaign.campaign_sha256())
+        self.assertEqual(binding.run_sha256, candidate_run.run_sha256())
+        self.assertEqual(binding.observation_sha256, observation.observation_sha256())
+        self.assertEqual(
+            BikvK8FirstTokenCampaignBindingV1.from_canonical_json(binding.canonical_json()),
+            binding,
+        )
+
+        with self.assertRaisesRegex(
+            BikvK8CampaignBindingError, "campaign slots do not match frozen protocol"
+        ):
+            BikvK8FirstTokenCampaignBindingV1.from_evidence(
+                evidence_bundle=bundle,
+                protocol=protocol,
+                campaign=campaign,
+                retained_runs=runs[:-1],
+                candidate_run=candidate_run,
+                observation=observation,
+            )
+
+    def test_campaign_binding_rejects_candidate_payload_not_in_manifest(self) -> None:
+        bundle = _bundle()
+        protocol = _protocol(bundle)
+        observation = _observation(bundle)
+        runs = _campaign_runs(protocol, observation)
+        campaign = BikvTargetCampaignV1.from_runs(protocol=protocol, runs=runs)
+        substituted = _run(
+            protocol,
+            observation,
+            attempt_id="candidate-seed1-r0-substituted",
+        )
+        with self.assertRaisesRegex(
+            BikvK8CampaignBindingError, "not retained in the supplied campaign manifest"
+        ):
+            BikvK8FirstTokenCampaignBindingV1.from_evidence(
+                evidence_bundle=bundle,
+                protocol=protocol,
+                campaign=campaign,
+                retained_runs=runs,
+                candidate_run=substituted,
+                observation=observation,
+            )
+
+    def test_campaign_binding_canonical_parser_rejects_duplicate_keys(self) -> None:
+        payload = (
+            '{"schema":"kvlab.bkv-k8-first-token-campaign-binding.v1",'
+            '"schema":"kvlab.bkv-k8-first-token-campaign-binding.v1"}'
+        )
+        with self.assertRaisesRegex(BikvK8CampaignBindingError, "duplicate JSON key"):
+            BikvK8FirstTokenCampaignBindingV1.from_canonical_json(payload)
+
+    def test_campaign_binding_cli_emits_content_addressed_receipt(self) -> None:
+        bundle = _bundle()
+        protocol = _protocol(bundle)
+        observation = _observation(bundle)
+        runs = _campaign_runs(protocol, observation)
+        campaign = BikvTargetCampaignV1.from_runs(protocol=protocol, runs=runs)
+        candidate_run = runs[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_path = root / "bundle.json"
+            protocol_path = root / "protocol.json"
+            campaign_path = root / "campaign.json"
+            candidate_path = root / "candidate.json"
+            observation_path = root / "observation.json"
+            bundle_path.write_bytes(bundle.canonical_json_bytes())
+            protocol_path.write_text(protocol.canonical_json(), encoding="utf-8")
+            campaign_path.write_bytes(campaign.canonical_json_bytes())
+            candidate_path.write_text(candidate_run.canonical_json(), encoding="utf-8")
+            observation_path.write_text(observation.canonical_json(), encoding="utf-8")
+            run_paths = []
+            for index, run in enumerate(runs):
+                path = root / f"run-{index}.json"
+                path.write_text(run.canonical_json(), encoding="utf-8")
+                run_paths.append(path)
+
+            command = [
+                sys.executable,
+                "tools/verify_bikv_first_token_campaign.py",
+                str(bundle_path),
+                str(protocol_path),
+                str(campaign_path),
+                str(candidate_path),
+                str(observation_path),
+            ] + [str(path) for path in run_paths]
+            completed = subprocess.run(command, check=False, capture_output=True, text=True)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            output = json.loads(completed.stdout)
+            self.assertEqual(output["campaign_sha256"], campaign.campaign_sha256())
+            self.assertEqual(output["run_sha256"], candidate_run.run_sha256())
+            self.assertEqual(output["observation_sha256"], observation.observation_sha256())
+            self.assertRegex(output["binding_sha256"], r"^[0-9a-f]{64}$")
+
 
 
 if __name__ == "__main__":
