@@ -147,6 +147,73 @@ class BikvTargetRunTests(unittest.TestCase):
             reason=None,
         ).validate()
 
+    def test_discrete_metric_requires_integer_value(self):
+        metrics = list(self.metrics())
+        index = REQUIRED_METRICS.index("dispatch_count")
+        metrics[index] = BikvMetricObservationV1(
+            name="dispatch_count",
+            status="measured",
+            value=0.5,
+            unit="count",
+            reason=None,
+        )
+        with self.assertRaisesRegex(BikvTargetRunError, "dispatch_count.*integer"):
+            self.target_run(metrics=tuple(metrics)).validate()
+
+    def test_cross_metric_latency_decomposition_fails_closed(self):
+        metrics = list(self.metrics())
+        frontend = REQUIRED_METRICS.index("boolean_frontend_ns")
+        first_token = REQUIRED_METRICS.index("first_token_latency_ns")
+        metrics[frontend] = BikvMetricObservationV1(
+            name="boolean_frontend_ns",
+            status="measured",
+            value=101,
+            unit="ns",
+            reason=None,
+        )
+        metrics[first_token] = BikvMetricObservationV1(
+            name="first_token_latency_ns",
+            status="measured",
+            value=100,
+            unit="ns",
+            reason=None,
+        )
+        with self.assertRaisesRegex(BikvTargetRunError, "cannot exceed"):
+            self.target_run(metrics=tuple(metrics)).validate()
+
+    def test_cross_metric_avoided_read_ratio_fails_closed(self):
+        metrics = list(self.metrics())
+        avoided = REQUIRED_METRICS.index("numerical_kv_bytes_avoided")
+        boolean_read = REQUIRED_METRICS.index("boolean_kv_bytes_read")
+        metrics[avoided] = BikvMetricObservationV1(
+            name="numerical_kv_bytes_avoided",
+            status="measured",
+            value=4096,
+            unit="bytes",
+            reason=None,
+        )
+        metrics[boolean_read] = BikvMetricObservationV1(
+            name="boolean_kv_bytes_read",
+            status="measured",
+            value=0,
+            unit="bytes",
+            reason=None,
+        )
+        with self.assertRaisesRegex(BikvTargetRunError, "requires non-zero"):
+            self.target_run(metrics=tuple(metrics)).validate()
+
+    def test_cross_metric_checks_only_apply_when_both_operands_are_measured(self):
+        metrics = list(self.metrics())
+        avoided = REQUIRED_METRICS.index("numerical_kv_bytes_avoided")
+        metrics[avoided] = BikvMetricObservationV1(
+            name="numerical_kv_bytes_avoided",
+            status="measured",
+            value=4096,
+            unit="bytes",
+            reason=None,
+        )
+        self.target_run(metrics=tuple(metrics)).validate()
+
     def test_unavailable_and_failed_metrics_cannot_carry_fake_values(self):
         metric = BikvMetricObservationV1(
             name="tpot_ns_per_token",

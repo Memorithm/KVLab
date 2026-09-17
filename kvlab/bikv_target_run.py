@@ -24,6 +24,29 @@ RUN_STATUSES = frozenset({"completed", "failed"})
 METRIC_STATUSES = frozenset({"measured", "not_exposed", "failed"})
 _BOOLEAN_METRICS = frozenset({"reset_reuse_correctness"})
 _SIGNED_NUMERIC_METRICS = frozenset({"downstream_quality"})
+_INTEGER_METRICS = frozenset(
+    {
+        "boolean_bits_per_token",
+        "boolean_bits_per_page",
+        "boolean_index_bytes",
+        "boolean_metadata_overhead_bytes",
+        "numerical_kv_bytes_touched",
+        "numerical_kv_bytes_avoided",
+        "boolean_kv_bytes_read",
+        "host_device_transfer_bytes",
+        "numa_traffic_bytes_when_measurable",
+        "fragmentation_bytes",
+        "allocator_overhead_bytes",
+        "query_signature_transfer_bytes",
+        "candidate_bitmap_transfer_bytes",
+        "synchronization_wait_ns",
+        "dispatch_count",
+        "backpressure_wait_ns",
+        "boolean_search_latency_ns",
+        "boolean_frontend_ns",
+        "first_token_latency_ns",
+    }
+)
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _RUN_FIELDS = frozenset(
@@ -72,6 +95,8 @@ def _measured_scalar(name: str, value: object) -> int | float | bool:
         return value
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise BikvTargetRunError(f"{name} measured value must be numeric")
+    if name in _INTEGER_METRICS and not isinstance(value, int):
+        raise BikvTargetRunError(f"{name} measured value must be an integer")
     if isinstance(value, float) and not math.isfinite(value):
         raise BikvTargetRunError(f"{name} measured value must be finite")
     if name not in _SIGNED_NUMERIC_METRICS and value < 0:
@@ -124,6 +149,35 @@ class BikvMetricObservationV1:
         return metric
 
 
+def _measured_metrics(
+    metrics: tuple["BikvMetricObservationV1", ...],
+) -> dict[str, int | float | bool]:
+    return {
+        metric.name: metric.value
+        for metric in metrics
+        if metric.status == "measured" and metric.value is not None
+    }
+
+
+def _validate_cross_metric_invariants(
+    metrics: tuple["BikvMetricObservationV1", ...],
+) -> None:
+    measured = _measured_metrics(metrics)
+    frontend = measured.get("boolean_frontend_ns")
+    first_token = measured.get("first_token_latency_ns")
+    if frontend is not None and first_token is not None and frontend > first_token:
+        raise BikvTargetRunError(
+            "boolean_frontend_ns cannot exceed first_token_latency_ns"
+        )
+
+    avoided = measured.get("numerical_kv_bytes_avoided")
+    boolean_read = measured.get("boolean_kv_bytes_read")
+    if avoided is not None and boolean_read is not None and avoided > 0 and boolean_read == 0:
+        raise BikvTargetRunError(
+            "non-zero numerical KV bytes avoided requires non-zero Boolean KV bytes read"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class BikvTargetRunV1:
     """One content-addressed baseline/candidate attempt under a frozen protocol."""
@@ -168,6 +222,7 @@ class BikvTargetRunV1:
             )
         for metric in self.metrics:
             metric.validate()
+        _validate_cross_metric_invariants(self.metrics)
 
         failed_metrics = [metric for metric in self.metrics if metric.status == "failed"]
         if self.status == "completed" and failed_metrics:
