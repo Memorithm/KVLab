@@ -78,6 +78,8 @@ The corresponding per-attempt retention contract `kvlab.bikv-target-run.v1` (`do
 
 The companion `kvlab.bikv-target-paired-summary.v1` surface now verifies those retained payloads against the complete campaign manifest and emits exact seed/repetition paired descriptive deltas while retaining unavailable/failed metric states. It is intentionally non-inferential: no p-value, confidence interval, winner or BKV-K9/NBKV promotion is synthesized before a separate decision rule is frozen. See `docs/BKV-K6-PAIRED-DESCRIPTIVE-SUMMARY.md`.
 
+The preregistration boundary is now explicit through `kvlab.bikv-target-analysis-plan.v1` (`docs/BKV-K6-ANALYSIS-PLAN.md`). It content-addresses the protocol-bound H0/H1, primary performance metric and direction, minimum effect, quality noninferiority guard, uncertainty method, complete-pair requirement, multiplicity policy and holdout policy before outcome inspection. The contract does not choose campaign thresholds or evaluate outcomes; BKV-K9 remains blocked until a concrete plan is frozen before target measurements and a later evaluator applies it without tuning.
+
 ## Canon
 
 See `Memorithm/scirust-hub` `CATALOG.md` and ADR-0020. Existing preregistrations remain authoritative for their campaigns. New Boolean KV experiments must be preregistered under the dedicated roadmap before confirmatory runs; the new programme extends KVLab rather than redesigning or duplicating it.
