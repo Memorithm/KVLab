@@ -58,6 +58,8 @@ observation and evidence bundle; it does not infer TPOT from the raw steady-stat
 sample vector or calculate a winner. Neither verifier opens a holdout or promotes
 BKV-K9/BKV-K11.
 
+`kvlab.bkv-k8-first-token-campaign-binding.v1` adds the campaign-level provenance link. It rebuilds the complete `kvlab.bikv-target-campaign.v1` manifest from every retained run payload, verifies the selected completed candidate run against the first-token observation, then content-addresses the evidence bundle, protocol, campaign, candidate run and observation in one canonical receipt. Failed sibling attempts remain part of the retained campaign instead of being filtered away. This receipt performs no aggregation and does not convert campaign completeness into a performance or promotion result.
+
 ## Remaining qualification
 
 Before BKV-K8 can support a promotion claim, a target-host/model campaign still
