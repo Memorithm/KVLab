@@ -49,7 +49,14 @@ with a physical traffic counter.
 
 `tools/verify_bikv_first_token_observation.py` performs this check on canonical
 JSON inputs and emits only verified identities and recorded observation fields.
-It does not calculate a winner, open a holdout or promote BKV-K9/BKV-K11.
+`tools/verify_bikv_first_token_target_run.py` additionally binds the observation
+to one exact completed candidate `kvlab.bikv-target-run.v1`: first-token latency,
+Boolean-front-end latency, numerical K/V bytes avoided and Boolean K/V bytes read
+must all be explicitly measured with canonical units and match the observation
+exactly. The verifier emits the content identities of the protocol, target run,
+observation and evidence bundle; it does not infer TPOT from the raw steady-state
+sample vector or calculate a winner. Neither verifier opens a holdout or promotes
+BKV-K9/BKV-K11.
 
 ## Remaining qualification
 

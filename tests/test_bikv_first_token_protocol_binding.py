@@ -20,6 +20,11 @@ from kvlab.bikv_target_protocol import (
     REQUIRED_METRICS,
     BikvTargetProtocolV1,
 )
+from kvlab.bikv_target_run import (
+    BKV_TARGET_RUN_SCHEMA_V1,
+    BikvMetricObservationV1,
+    BikvTargetRunV1,
+)
 from kvlab.bikv_traffic import LOGICAL_PACKED_PAYLOAD, PHYSICAL_DRAM_COUNTER
 
 
@@ -99,6 +104,36 @@ def _observation(bundle: BikvEvidenceBundleV1, **changes: object) -> BikvK8First
     return BikvK8FirstTokenObservationV2(**values)  # type: ignore[arg-type]
 
 
+def _run(protocol: BikvTargetProtocolV1, observation: BikvK8FirstTokenObservationV2, **changes: object) -> BikvTargetRunV1:
+    shared = {
+        "first_token_latency_ns": (observation.first_token_latency_ns, "ns"),
+        "boolean_frontend_ns": (observation.boolean_frontend_ns, "ns"),
+        "numerical_kv_bytes_avoided": (observation.numerical_kv_bytes_avoided, "bytes"),
+        "boolean_kv_bytes_read": (observation.boolean_kv_bytes_read, "bytes"),
+    }
+    metrics = []
+    for name in REQUIRED_METRICS:
+        if name in shared:
+            value, unit = shared[name]
+            metrics.append(BikvMetricObservationV1(name, "measured", value, unit, None))
+        else:
+            metrics.append(BikvMetricObservationV1(name, "not_exposed", None, None, "not exposed by fixture"))
+    values: dict[str, object] = {
+        "schema": BKV_TARGET_RUN_SCHEMA_V1,
+        "protocol_sha256": protocol.protocol_sha256(),
+        "campaign_id": protocol.campaign_id,
+        "attempt_id": "candidate-seed1-r0",
+        "variant": "candidate",
+        "seed": 1,
+        "repetition_index": 0,
+        "status": "completed",
+        "failure_reason": None,
+        "metrics": tuple(metrics),
+    }
+    values.update(changes)
+    return BikvTargetRunV1(**values)  # type: ignore[arg-type]
+
+
 class BikvFirstTokenProtocolBindingTests(unittest.TestCase):
     def test_exact_bundle_protocol_and_observation_bind(self) -> None:
         bundle = _bundle()
@@ -161,6 +196,87 @@ class BikvFirstTokenProtocolBindingTests(unittest.TestCase):
                 evidence_bundle=bundle,
                 protocol=protocol,
             )
+
+    def test_target_run_binding_requires_exact_shared_metrics(self) -> None:
+        bundle = _bundle()
+        protocol = _protocol(bundle)
+        observation = _observation(bundle)
+        run = _run(protocol, observation)
+        observation.validate_against_target_run(
+            evidence_bundle=bundle,
+            protocol=protocol,
+            run=run,
+        )
+
+        metrics = list(run.metrics)
+        index = REQUIRED_METRICS.index("first_token_latency_ns")
+        metrics[index] = BikvMetricObservationV1(
+            "first_token_latency_ns", "measured", 1001, "ns", None
+        )
+        drifted = _run(protocol, observation, metrics=tuple(metrics))
+        with self.assertRaisesRegex(BikvFirstTokenObservationError, "does not match"):
+            observation.validate_against_target_run(
+                evidence_bundle=bundle,
+                protocol=protocol,
+                run=drifted,
+            )
+
+    def test_target_run_binding_rejects_noncandidate_or_unmeasured_metric(self) -> None:
+        bundle = _bundle()
+        protocol = _protocol(bundle)
+        observation = _observation(bundle)
+        with self.assertRaisesRegex(BikvFirstTokenObservationError, "candidate target run"):
+            observation.validate_against_target_run(
+                evidence_bundle=bundle,
+                protocol=protocol,
+                run=_run(protocol, observation, variant="baseline"),
+            )
+        run = _run(protocol, observation)
+        metrics = list(run.metrics)
+        index = REQUIRED_METRICS.index("boolean_kv_bytes_read")
+        metrics[index] = BikvMetricObservationV1(
+            "boolean_kv_bytes_read", "not_exposed", None, None, "counter unavailable"
+        )
+        with self.assertRaisesRegex(BikvFirstTokenObservationError, "must be measured"):
+            observation.validate_against_target_run(
+                evidence_bundle=bundle,
+                protocol=protocol,
+                run=_run(protocol, observation, metrics=tuple(metrics)),
+            )
+
+    def test_target_run_binding_cli_emits_content_identities(self) -> None:
+        bundle = _bundle()
+        protocol = _protocol(bundle)
+        observation = _observation(bundle)
+        run = _run(protocol, observation)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_path = root / "bundle.json"
+            protocol_path = root / "protocol.json"
+            run_path = root / "run.json"
+            observation_path = root / "observation.json"
+            bundle_path.write_bytes(bundle.canonical_json_bytes())
+            protocol_path.write_text(protocol.canonical_json(), encoding="utf-8")
+            run_path.write_text(run.canonical_json(), encoding="utf-8")
+            observation_path.write_text(observation.canonical_json(), encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "tools/verify_bikv_first_token_target_run.py",
+                    str(bundle_path),
+                    str(protocol_path),
+                    str(run_path),
+                    str(observation_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            output = json.loads(completed.stdout)
+            self.assertEqual(output["run_sha256"], run.run_sha256())
+            self.assertEqual(output["observation_sha256"], observation.observation_sha256())
+            self.assertEqual(output["attempt_id"], run.attempt_id)
 
     def test_cli_emits_only_verified_identity_and_observation_fields(self) -> None:
         bundle = _bundle()
