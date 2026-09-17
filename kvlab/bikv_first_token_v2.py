@@ -13,6 +13,8 @@ from .bikv_first_token import (
     BikvFirstTokenObservationError,
     BikvK8FirstTokenObservationV1,
 )
+from .bikv_evidence_bundle import BikvEvidenceBundleV1
+from .bikv_target_protocol import BikvTargetProtocolV1
 from .bikv_traffic import BikvTrafficEvidence, BikvTrafficEvidenceError
 
 
@@ -93,6 +95,48 @@ class BikvK8FirstTokenObservationV2:
             self.traffic_evidence()
         except BikvTrafficEvidenceError as exc:
             raise BikvFirstTokenObservationError(str(exc)) from exc
+
+    def validate_against(
+        self,
+        *,
+        evidence_bundle: BikvEvidenceBundleV1,
+        protocol: BikvTargetProtocolV1,
+    ) -> None:
+        """Bind one K8 observation to the exact preregistered campaign inputs.
+
+        This check is provenance-only. It does not decide whether the observed
+        latency or byte counters are scientifically favorable.
+        """
+
+        self.validate()
+        evidence_bundle.validate()
+        protocol.validate()
+
+        bundle_sha256 = evidence_bundle.bundle_sha256()
+        if self.evidence_bundle_sha256 != bundle_sha256:
+            raise BikvFirstTokenObservationError(
+                "observation evidence_bundle_sha256 does not match retained evidence bundle"
+            )
+        if protocol.evidence_bundle_sha256 != bundle_sha256:
+            raise BikvFirstTokenObservationError(
+                "protocol evidence_bundle_sha256 does not match retained evidence bundle"
+            )
+        if self.hardware_fingerprint_sha256 != protocol.hardware_fingerprint_sha256:
+            raise BikvFirstTokenObservationError(
+                "observation hardware fingerprint does not match frozen target protocol"
+            )
+        if self.timing_source != protocol.timing_source:
+            raise BikvFirstTokenObservationError(
+                "observation timing source does not match frozen target protocol"
+            )
+        if self.numerical_evidence_kind != protocol.byte_evidence_kind:
+            raise BikvFirstTokenObservationError(
+                "numerical byte evidence kind does not match frozen target protocol"
+            )
+        if self.boolean_evidence_kind != protocol.byte_evidence_kind:
+            raise BikvFirstTokenObservationError(
+                "Boolean byte evidence kind does not match frozen target protocol"
+            )
 
     def numerical_to_boolean_bytes_ratio(self) -> Fraction | None:
         """Return an exact ratio only for like-for-like byte evidence."""
