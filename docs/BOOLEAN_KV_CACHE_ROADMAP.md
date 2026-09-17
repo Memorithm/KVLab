@@ -190,6 +190,8 @@ Compare:
 
 Required metrics include first-token latency, TPOT, tokens/s, candidate density, quality, O/LSE error, Boolean overhead and numerical KV bytes avoided.
 
+The selection-only baseline contract is now explicit in `kvlab/bikv_k5_baselines.py`: for every frozen Boolean candidate set, the random control and simple tail-positional control select exactly the same number of logical pages. The random control uses the versioned `splitmix64-page-ranking-v1` rule rather than Python's runtime-dependent PRNG. These page sets are controls only; they do not infer traffic, latency, quality, or performance. Full numerical and paged numerical controls continue to retain all logical pages and must be executed by the numerical backend.
+
 ### BKV-K6 — CPU/GPU cooperative pipeline
 
 Test CPU Boolean search in parallel with GPU numerical attention.
