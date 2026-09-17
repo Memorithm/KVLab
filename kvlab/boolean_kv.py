@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Iterable, Sequence
 
+from .bikv_traffic import BikvTrafficEvidence, BikvTrafficEvidenceError
+
 
 WORD_BITS = 64
 WORD_MASK = (1 << WORD_BITS) - 1
@@ -136,34 +138,41 @@ class BooleanKvAccounting:
 
 @dataclass(frozen=True)
 class BooleanKvTrafficAccounting:
-    """Measured traffic counters for Boolean-indexed numerical KV routing.
+    """Evidence-kind-bound counters for Boolean-indexed numerical KV routing.
 
-    The counters are observations supplied by an experiment/runtime.  This type
-    never infers avoided numerical traffic from candidate density, logical page
-    counts, or signature width.  The ratio is therefore available only when
-    Boolean metadata traffic was actually recorded.
+    The byte values are observations or exact accounting supplied by an
+    experiment/runtime; this type never infers them from candidate density,
+    logical page counts, or signature width.  Numerator and denominator must
+    explicitly use the same evidence kind before a ratio can be produced.
     """
 
     numerical_kv_bytes_avoided: int
+    numerical_evidence_kind: str
     boolean_kv_bytes_read: int
+    boolean_evidence_kind: str
 
     def __post_init__(self) -> None:
-        _require_non_negative_byte_count(
-            "numerical_kv_bytes_avoided", self.numerical_kv_bytes_avoided
+        try:
+            self.traffic_evidence.validate()
+        except BikvTrafficEvidenceError as exc:
+            raise BooleanKvError(str(exc)) from exc
+
+    @property
+    def traffic_evidence(self) -> BikvTrafficEvidence:
+        """Return the generic typed evidence represented by these counters."""
+
+        return BikvTrafficEvidence(
+            numerical_kv_bytes_avoided=self.numerical_kv_bytes_avoided,
+            numerical_evidence_kind=self.numerical_evidence_kind,
+            boolean_kv_bytes_read=self.boolean_kv_bytes_read,
+            boolean_evidence_kind=self.boolean_evidence_kind,
         )
-        _require_non_negative_byte_count("boolean_kv_bytes_read", self.boolean_kv_bytes_read)
-        if self.numerical_kv_bytes_avoided > 0 and self.boolean_kv_bytes_read == 0:
-            raise BooleanKvError(
-                "non-zero numerical KV bytes avoided requires measured Boolean KV bytes read"
-            )
 
     @property
     def numerical_bytes_avoided_per_boolean_byte(self) -> Fraction | None:
-        """Return the exact measured traffic ratio, or ``None`` without reads."""
+        """Return the exact like-for-like ratio, or ``None`` without reads."""
 
-        if self.boolean_kv_bytes_read == 0:
-            return None
-        return Fraction(self.numerical_kv_bytes_avoided, self.boolean_kv_bytes_read)
+        return self.traffic_evidence.numerical_bytes_avoided_per_boolean_byte
 
 
 @dataclass(frozen=True)

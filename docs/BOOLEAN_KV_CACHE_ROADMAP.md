@@ -30,7 +30,7 @@ A second memory-efficiency hypothesis is:
 numerical_KV_bytes_avoided / Boolean_KV_bytes_read >> 1
 ```
 
-This ratio must be measured, not assumed.
+This ratio must be measured or exactly accounted for, never inferred from candidate density. Every retained ratio must declare one evidence kind for both numerator and denominator: `logical_packed_payload`, `host_observed_transfer`, `device_observed_transfer`, or `physical_dram_counter`. Mixed-kind ratios are invalid. Logical packed-payload accounting is not allocator residency, cache-line traffic, PCIe/NVLink transfer, memory-controller traffic, or DRAM bandwidth.
 
 ## First-class cache object
 
