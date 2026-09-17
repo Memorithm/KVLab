@@ -91,14 +91,18 @@ def _quality(selection=None, target=None, metric_updates=None):
     }
     if metric_updates:
         metrics.update(metric_updates)
-    return _compact(
-        {
-            "schema": "flat.bikv-selection-quality.v1",
-            "selection": selection,
-            "declared_dense_target_pages": target,
-            "metrics": metrics,
-        }
-    )
+    core = {
+        "schema": "flat.bikv-selection-quality.v1",
+        "selection": selection,
+        "declared_dense_target_pages": target,
+        "metrics": metrics,
+    }
+    prefix = _compact(core)[:-1]
+    core["quality_checksum"] = {
+        "algorithm": "fnv1a64",
+        "value": _fnv(prefix),
+    }
+    return _compact(core)
 
 
 class FlatBikvSelectionQualityTests(unittest.TestCase):
@@ -114,7 +118,7 @@ class FlatBikvSelectionQualityTests(unittest.TestCase):
         self.assertEqual(len(evidence.selection_sha256), 64)
         self.assertEqual(
             FLAT_BIKV_SELECTION_QUALITY_CANDIDATE_REVISION,
-            "c31284780e21a67b5a47f469d4493a17e396259d",
+            "6fdcaf38c1be7d7f4a70fac6d7b8aa6f214db124",
         )
 
     def test_rejects_metric_drift(self):
@@ -130,6 +134,20 @@ class FlatBikvSelectionQualityTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(FlatBikvSelectionQualityError, "metrics.recall"):
             FlatBikvSelectionQualityV1.from_canonical_json_bytes(payload)
+
+    def test_rejects_stale_outer_checksum_after_target_or_metric_mutation(self):
+        payload = _quality()
+        raw = json.loads(payload)
+        raw["declared_dense_target_pages"] = [0]
+        mutated_target = _compact(raw)
+        with self.assertRaisesRegex(FlatBikvSelectionQualityError, "quality_checksum"):
+            FlatBikvSelectionQualityV1.from_canonical_json_bytes(mutated_target)
+
+        raw = json.loads(payload)
+        raw["metrics"]["false_positive_pages"] = 0
+        mutated_metric = _compact(raw)
+        with self.assertRaisesRegex(FlatBikvSelectionQualityError, "false_positive_pages|quality_checksum"):
+            FlatBikvSelectionQualityV1.from_canonical_json_bytes(mutated_metric)
 
     def test_rejects_empty_unsorted_duplicate_and_out_of_range_targets(self):
         cases = (

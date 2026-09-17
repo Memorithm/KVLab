@@ -19,6 +19,7 @@ from typing import Any
 
 from .flat_bikv_selection_binding import (
     FlatBikvSelectionBindingError,
+    _fnv1a64,
     _validate_selection,
 )
 
@@ -26,7 +27,7 @@ FLAT_BIKV_SELECTION_QUALITY_SCHEMA = "flat.bikv-selection-quality.v1"
 # Candidate producer head for FLAT-ATTENTION #252. This is deliberately not
 # called a final reference revision until the producer PR is qualified/merged.
 FLAT_BIKV_SELECTION_QUALITY_CANDIDATE_REVISION = (
-    "c31284780e21a67b5a47f469d4493a17e396259d"
+    "6fdcaf38c1be7d7f4a70fac6d7b8aa6f214db124"
 )
 
 _U64_MAX = (1 << 64) - 1
@@ -35,6 +36,7 @@ _TOP_FIELDS = (
     "selection",
     "declared_dense_target_pages",
     "metrics",
+    "quality_checksum",
 )
 _METRIC_FIELDS = (
     "mapped_pages",
@@ -48,6 +50,7 @@ _METRIC_FIELDS = (
     "candidate_density",
 )
 _FRACTION_FIELDS = ("numerator", "denominator")
+_CHECKSUM_FIELDS = ("algorithm", "value")
 
 
 class FlatBikvSelectionQualityError(ValueError):
@@ -74,6 +77,28 @@ def _u64(name: str, value: Any) -> int:
 def _compact_json(value: Any) -> bytes:
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
+
+
+def _checksum_value(value: Any) -> str:
+    if not isinstance(value, dict) or tuple(value) != _CHECKSUM_FIELDS:
+        raise FlatBikvSelectionQualityError(
+            "quality_checksum fields/order do not match algorithm/value schema"
+        )
+    if value["algorithm"] != "fnv1a64":
+        raise FlatBikvSelectionQualityError(
+            "quality_checksum algorithm must be fnv1a64"
+        )
+    checksum = value["value"]
+    if (
+        not isinstance(checksum, str)
+        or len(checksum) != 16
+        or checksum != checksum.lower()
+        or any(character not in "0123456789abcdef" for character in checksum)
+    ):
+        raise FlatBikvSelectionQualityError(
+            "quality_checksum value must be 16 lowercase hexadecimal digits"
+        )
+    return checksum
 
 def _fraction(name: str, value: Any) -> tuple[int, int]:
     if not isinstance(value, dict) or tuple(value) != _FRACTION_FIELDS:
@@ -160,6 +185,26 @@ class FlatBikvSelectionQualityV1:
         if raw["schema"] != FLAT_BIKV_SELECTION_QUALITY_SCHEMA:
             raise FlatBikvSelectionQualityError("unsupported quality schema")
 
+        checksum = _checksum_value(raw["quality_checksum"])
+        without_checksum = {
+            key: value for key, value in raw.items() if key != "quality_checksum"
+        }
+        prefix = _compact_json(without_checksum)[:-1]
+        if checksum != _fnv1a64(prefix):
+            raise FlatBikvSelectionQualityError(
+                "quality_checksum does not match the complete canonical producer prefix"
+            )
+        canonical = (
+            prefix
+            + b',"quality_checksum":{"algorithm":"fnv1a64","value":"'
+            + checksum.encode("ascii")
+            + b'"}}'
+        )
+        if canonical != payload:
+            raise FlatBikvSelectionQualityError(
+                "quality payload is not the canonical compact producer encoding"
+            )
+
         selection = raw["selection"]
         try:
             _validate_selection(selection)
@@ -214,11 +259,6 @@ class FlatBikvSelectionQualityV1:
                     f"metrics.{name} does not match recomputed exact fraction"
                 )
 
-        canonical = _compact_json(raw)
-        if canonical != payload:
-            raise FlatBikvSelectionQualityError(
-                "quality payload is not the canonical compact producer encoding"
-            )
         selection_bytes = _compact_json(selection)
         return cls(
             canonical_bytes=payload,
