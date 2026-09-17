@@ -72,6 +72,8 @@ The next KVLab Boolean-KV gate is therefore to retain/cross-link BIKV evidence p
 
 The target-host/model campaign inputs are now frozen by `kvlab.bikv-target-protocol.v1` (`docs/BKV-K6-TARGET-PROTOCOL.md`): exact KVLab/FLAT/model/tokenizer/runtime/dataset revisions, hardware fingerprint, precision/context/batch, seeds/warmups/repetitions, full-cache/native-prefill baseline, holdout/tuning boundary, timing/byte evidence kind and the mandatory BKV-K5/K6 correctness, memory/traffic, transfer/synchronization, backpressure and performance metric surface is content-addressed before execution. This is preregistration infrastructure only; it does not satisfy the BKV-K9 evidence gate without actual retained measurements.
 
+The corresponding per-attempt retention contract `kvlab.bikv-target-run.v1` (`docs/BKV-K6-TARGET-RUN.md`) binds baseline/candidate attempts to that exact protocol and requires every frozen metric obligation to be retained explicitly as measured, not exposed, or failed. Failed attempts are first-class evidence rather than silently discarded. This is still evidence infrastructure, not a target-host/model qualification result.
+
 ## Canon
 
 See `Memorithm/scirust-hub` `CATALOG.md` and ADR-0020. Existing preregistrations remain authoritative for their campaigns. New Boolean KV experiments must be preregistered under the dedicated roadmap before confirmatory runs; the new programme extends KVLab rather than redesigning or duplicating it.
