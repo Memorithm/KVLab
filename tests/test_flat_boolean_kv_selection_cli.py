@@ -11,12 +11,12 @@ TOOL = ROOT / "tools" / "verify_flat_boolean_kv_selection.py"
 VALID = (
     b'{"schema":"flat.boolean-kv-selection.v1","generation":0,"signature_bits":8,'
     b'"live_tokens":10,"mapped_pages":3,"boolean_pages_scanned":3,'
-    b'"boolean_key_bytes_read":24,"full_numerical_kv_bytes":640,'
+    b'"boolean_key_bytes_read":24,"numerical_kv_bytes_per_token":64,"full_numerical_kv_bytes":640,'
     b'"selected_numerical_kv_bytes":384,"avoided_numerical_kv_bytes":256,'
     b'"selected_pages":[{"logical_page":1,"physical_page":1,"live_tokens":4,'
     b'"hamming_distance":0,"xnor_matches":8},{"logical_page":2,"physical_page":2,'
     b'"live_tokens":2,"hamming_distance":1,"xnor_matches":7}],'
-    b'"evidence_checksum":{"algorithm":"fnv1a64","value":"fd932815b27ff883"}}'
+    b'"evidence_checksum":{"algorithm":"fnv1a64","value":"347bf775c963bf3b"}}'
 )
 
 
@@ -43,7 +43,7 @@ class FlatBooleanKvSelectionCliTests(unittest.TestCase):
         self.assertEqual(output["boolean_key_bytes_read"], 24)
         self.assertEqual(
             output["flat_reference_revision"],
-            "155a7bb64ba60fe023cfb6dd9d83e577fb907e0c",
+            "dab6704f4c97c15147227ca586fa7c2f8dc26a4d",
         )
         self.assertEqual(len(output["selection_sha256"]), 64)
         self.assertNotIn("speedup", output)

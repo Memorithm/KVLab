@@ -17,7 +17,7 @@ from typing import Any
 
 FLAT_BOOLEAN_KV_SELECTION_SCHEMA = "flat.boolean-kv-selection.v1"
 FLAT_BOOLEAN_KV_SELECTION_REFERENCE_REVISION = (
-    "155a7bb64ba60fe023cfb6dd9d83e577fb907e0c"
+    "dab6704f4c97c15147227ca586fa7c2f8dc26a4d"
 )
 _U64_MAX = (1 << 64) - 1
 _TOP_FIELDS = (
@@ -28,6 +28,7 @@ _TOP_FIELDS = (
     "mapped_pages",
     "boolean_pages_scanned",
     "boolean_key_bytes_read",
+    "numerical_kv_bytes_per_token",
     "full_numerical_kv_bytes",
     "selected_numerical_kv_bytes",
     "avoided_numerical_kv_bytes",
@@ -99,6 +100,7 @@ class FlatBooleanKvSelectionV1:
     mapped_pages: int
     boolean_pages_scanned: int
     boolean_key_bytes_read: int
+    numerical_kv_bytes_per_token: int
     full_numerical_kv_bytes: int
     selected_numerical_kv_bytes: int
     avoided_numerical_kv_bytes: int
@@ -114,6 +116,9 @@ class FlatBooleanKvSelectionV1:
         mapped_pages = _u64("mapped_pages", self.mapped_pages)
         scanned = _u64("boolean_pages_scanned", self.boolean_pages_scanned)
         boolean_bytes = _u64("boolean_key_bytes_read", self.boolean_key_bytes_read)
+        bytes_per_token = _u64(
+            "numerical_kv_bytes_per_token", self.numerical_kv_bytes_per_token
+        )
         full_bytes = _u64("full_numerical_kv_bytes", self.full_numerical_kv_bytes)
         selected_bytes = _u64(
             "selected_numerical_kv_bytes", self.selected_numerical_kv_bytes
@@ -129,35 +134,31 @@ class FlatBooleanKvSelectionV1:
             )
         if len(self.selected_pages) > mapped_pages:
             raise FlatBooleanKvSelectionError("selected page count exceeds mapped_pages")
-        if selected_bytes + avoided_bytes != full_bytes:
-            raise FlatBooleanKvSelectionError("numerical byte accounting is inconsistent")
+        expected_boolean_bytes = mapped_pages * ((signature_bits + 63) // 64) * 8
+        if boolean_bytes != expected_boolean_bytes:
+            raise FlatBooleanKvSelectionError(
+                "Boolean key bytes read do not match packed signature geometry"
+            )
         if (live_tokens == 0) != (mapped_pages == 0):
             raise FlatBooleanKvSelectionError(
                 "live-token/page cardinality is inconsistent"
             )
         if live_tokens == 0:
-            if full_bytes or selected_bytes or avoided_bytes or self.selected_pages:
+            if not bytes_per_token or full_bytes or selected_bytes or avoided_bytes or self.selected_pages:
                 raise FlatBooleanKvSelectionError(
-                    "empty selection must retain zero numerical bytes and no selected pages"
+                    "empty selection must retain byte geometry but zero totals and no pages"
                 )
         else:
-            if full_bytes % live_tokens:
+            if bytes_per_token == 0:
                 raise FlatBooleanKvSelectionError(
-                    "full numerical bytes are not an integral bytes-per-token accounting"
+                    "non-empty selection requires numerical KV bytes per token"
                 )
-            bytes_per_token = full_bytes // live_tokens
-            selected_live_tokens = sum(page.live_tokens for page in self.selected_pages)
-            if (
-                selected_live_tokens > live_tokens
-                or selected_live_tokens * bytes_per_token != selected_bytes
-            ):
+            expected_full = live_tokens * bytes_per_token
+            if full_bytes != expected_full:
                 raise FlatBooleanKvSelectionError(
-                    "selected numerical bytes do not match selected live tokens"
+                    "full numerical bytes do not match live-token geometry"
                 )
-        if mapped_pages and boolean_bytes == 0:
-            raise FlatBooleanKvSelectionError(
-                "mapped pages require non-zero Boolean key bytes read"
-            )
+
 
         previous_logical: int | None = None
         physical_pages: set[int] = set()
@@ -181,6 +182,15 @@ class FlatBooleanKvSelectionV1:
             raise FlatBooleanKvSelectionError(
                 "selected page live-token total exceeds live_tokens"
             )
+        expected_selected = selected_live_tokens * bytes_per_token
+        if selected_bytes != expected_selected:
+            raise FlatBooleanKvSelectionError(
+                "selected numerical bytes do not match selected live tokens"
+            )
+        if avoided_bytes != full_bytes - expected_selected:
+            raise FlatBooleanKvSelectionError(
+                "avoided numerical bytes do not match full minus selected bytes"
+            )
         if not isinstance(self.evidence_checksum, str) or len(self.evidence_checksum) != 16:
             raise FlatBooleanKvSelectionError("evidence checksum must be 16 lowercase hex digits")
         if self.evidence_checksum != self.evidence_checksum.lower() or any(
@@ -202,6 +212,7 @@ class FlatBooleanKvSelectionV1:
             "mapped_pages": self.mapped_pages,
             "boolean_pages_scanned": self.boolean_pages_scanned,
             "boolean_key_bytes_read": self.boolean_key_bytes_read,
+            "numerical_kv_bytes_per_token": self.numerical_kv_bytes_per_token,
             "full_numerical_kv_bytes": self.full_numerical_kv_bytes,
             "selected_numerical_kv_bytes": self.selected_numerical_kv_bytes,
             "avoided_numerical_kv_bytes": self.avoided_numerical_kv_bytes,
@@ -268,6 +279,7 @@ class FlatBooleanKvSelectionV1:
             mapped_pages=raw["mapped_pages"],
             boolean_pages_scanned=raw["boolean_pages_scanned"],
             boolean_key_bytes_read=raw["boolean_key_bytes_read"],
+            numerical_kv_bytes_per_token=raw["numerical_kv_bytes_per_token"],
             full_numerical_kv_bytes=raw["full_numerical_kv_bytes"],
             selected_numerical_kv_bytes=raw["selected_numerical_kv_bytes"],
             avoided_numerical_kv_bytes=raw["avoided_numerical_kv_bytes"],

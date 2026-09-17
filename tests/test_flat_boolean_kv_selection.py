@@ -11,12 +11,12 @@ from kvlab.flat_boolean_kv_selection import (
 FLAT_REFERENCE_FIXTURE = (
     b'{"schema":"flat.boolean-kv-selection.v1","generation":0,"signature_bits":8,'
     b'"live_tokens":10,"mapped_pages":3,"boolean_pages_scanned":3,'
-    b'"boolean_key_bytes_read":24,"full_numerical_kv_bytes":640,'
+    b'"boolean_key_bytes_read":24,"numerical_kv_bytes_per_token":64,"full_numerical_kv_bytes":640,'
     b'"selected_numerical_kv_bytes":384,"avoided_numerical_kv_bytes":256,'
     b'"selected_pages":[{"logical_page":1,"physical_page":1,"live_tokens":4,'
     b'"hamming_distance":0,"xnor_matches":8},{"logical_page":2,"physical_page":2,'
     b'"live_tokens":2,"hamming_distance":1,"xnor_matches":7}],'
-    b'"evidence_checksum":{"algorithm":"fnv1a64","value":"fd932815b27ff883"}}'
+    b'"evidence_checksum":{"algorithm":"fnv1a64","value":"347bf775c963bf3b"}}'
 )
 
 
@@ -30,7 +30,7 @@ class FlatBooleanKvSelectionTests(unittest.TestCase):
         self.assertEqual(len(selection.selection_sha256()), 64)
         self.assertEqual(
             FLAT_BOOLEAN_KV_SELECTION_REFERENCE_REVISION,
-            "155a7bb64ba60fe023cfb6dd9d83e577fb907e0c",
+            "dab6704f4c97c15147227ca586fa7c2f8dc26a4d",
         )
         self.assertEqual([page.logical_page for page in selection.selected_pages], [1, 2])
 
@@ -83,6 +83,15 @@ class FlatBooleanKvSelectionTests(unittest.TestCase):
         payload = json.dumps(raw, separators=(",", ":")).encode()
         with self.assertRaisesRegex(
             FlatBooleanKvSelectionError, "selected numerical bytes"
+        ):
+            FlatBooleanKvSelectionV1.from_canonical_json_bytes(payload)
+
+    def test_boolean_byte_count_must_match_packed_signature_geometry(self) -> None:
+        raw = json.loads(FLAT_REFERENCE_FIXTURE)
+        raw["boolean_key_bytes_read"] = 1
+        payload = json.dumps(raw, separators=(",", ":")).encode()
+        with self.assertRaisesRegex(
+            FlatBooleanKvSelectionError, "packed signature geometry"
         ):
             FlatBooleanKvSelectionV1.from_canonical_json_bytes(payload)
 

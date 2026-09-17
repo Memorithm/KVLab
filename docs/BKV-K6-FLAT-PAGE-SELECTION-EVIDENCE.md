@@ -9,8 +9,9 @@ record.
 
 KVLab accepts only the exact canonical byte encoding from the pinned producer
 revision. It verifies the producer's FNV-1a checksum, strict logical-page order,
-unique physical pages, Hamming/XNOR conservation, selected/live-token bounds,
-and logical numerical-byte conservation. KVLab then derives a SHA-256 content
+unique physical pages, Hamming/XNOR conservation, exact packed Boolean-byte
+geometry, selected/live-token bounds, and numerical byte totals rederived from
+the retained K+V bytes/token geometry. KVLab then derives a SHA-256 content
 identity over the exact canonical producer bytes for bundle retention.
 
 The FNV checksum is not cryptographic attestation. The producer record contains
