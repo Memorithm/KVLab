@@ -43,11 +43,15 @@ class BikvFirstTokenObservationTests(unittest.TestCase):
         self.assertEqual(len(decoded.observation_sha256()), 64)
 
     def test_zero_boolean_bytes_has_no_defined_ratio(self) -> None:
-        observation = _observation(
-            boolean_kv_bytes_read=0,
-            numerical_kv_bytes_avoided=0,
-        )
-        self.assertIsNone(observation.numerical_to_boolean_bytes_ratio())
+        for numerical_bytes in (0, 4096):
+            with self.subTest(numerical_kv_bytes_avoided=numerical_bytes):
+                observation = _observation(
+                    boolean_kv_bytes_read=0,
+                    numerical_kv_bytes_avoided=numerical_bytes,
+                )
+                encoded = observation.canonical_json()
+                decoded = BikvK8FirstTokenObservationV1.from_canonical_json(encoded)
+                self.assertIsNone(decoded.numerical_to_boolean_bytes_ratio())
 
     def test_boolean_first_token_readiness_rejects_historical_rebuild(self) -> None:
         with self.assertRaisesRegex(
