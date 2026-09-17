@@ -1,0 +1,82 @@
+import json
+import unittest
+
+from kvlab.flat_boolean_kv_wgpu_parity import (
+    FLAT_BOOLEAN_KV_WGPU_PARITY_CANDIDATE_REVISION,
+    FlatBooleanKvWgpuParityError,
+    FlatBooleanKvWgpuParityV1,
+)
+
+POSITIVE = b'{"schema":"flat.boolean-kv-wgpu-parity.v1","signature_bits":65,"key_count":3,"words_per_signature":4,"max_distance":1,"query_words_u32":[11,0,1,0],"key_words_u32":[11,0,1,0,3,0,1,0,0,0,0,0],"cpu_admitted_blocks":[0,1],"wgpu_admitted_blocks":[0,1],"exact_candidate_set_match":true,"parity_checksum":{"algorithm":"fnv1a64","value":"27e6f7c142cd9d92"}}'
+NEGATIVE = b'{"schema":"flat.boolean-kv-wgpu-parity.v1","signature_bits":65,"key_count":3,"words_per_signature":4,"max_distance":1,"query_words_u32":[11,0,1,0],"key_words_u32":[11,0,1,0,3,0,1,0,0,0,0,0],"cpu_admitted_blocks":[0,1],"wgpu_admitted_blocks":[0,2],"exact_candidate_set_match":false,"parity_checksum":{"algorithm":"fnv1a64","value":"071aadd03855039e"}}'
+
+def canonical_payload(raw: dict) -> bytes:
+    checksum_record = raw.setdefault(
+        "parity_checksum", {"algorithm": "fnv1a64", "value": "0" * 16}
+    )
+    checksum_record["algorithm"] = "fnv1a64"
+    prefix = json.dumps(
+        {key: value for key, value in raw.items() if key != "parity_checksum"},
+        separators=(",", ":"),
+    ).encode()[:-1]
+    checksum = 0xCBF29CE484222325
+    for byte in prefix:
+        checksum ^= byte
+        checksum = (checksum * 0x100000001B3) & ((1 << 64) - 1)
+    checksum_record["value"] = f"{checksum:016x}"
+    return json.dumps(raw, separators=(",", ":")).encode()
+
+
+
+class FlatBooleanKvWgpuParityTests(unittest.TestCase):
+    def test_positive_reference_round_trips_and_allows_match_gate(self) -> None:
+        evidence = FlatBooleanKvWgpuParityV1.from_canonical_json_bytes(POSITIVE)
+        self.assertEqual(evidence.canonical_bytes, POSITIVE)
+        self.assertEqual(evidence.cpu_admitted_blocks, (0, 1))
+        self.assertEqual(evidence.wgpu_admitted_blocks, (0, 1))
+        self.assertTrue(evidence.exact_candidate_set_match)
+        self.assertEqual(len(evidence.parity_sha256), 64)
+        evidence.require_exact_match()
+        self.assertEqual(
+            FLAT_BOOLEAN_KV_WGPU_PARITY_CANDIDATE_REVISION,
+            "9f2e6507780ca2c3d6f6f89d3bdf297b11b805ce",
+        )
+
+    def test_negative_candidate_mismatch_is_retained_but_blocks_timing(self) -> None:
+        evidence = FlatBooleanKvWgpuParityV1.from_canonical_json_bytes(NEGATIVE)
+        self.assertFalse(evidence.exact_candidate_set_match)
+        self.assertEqual(evidence.cpu_admitted_blocks, (0, 1))
+        self.assertEqual(evidence.wgpu_admitted_blocks, (0, 2))
+        with self.assertRaisesRegex(FlatBooleanKvWgpuParityError, "blocks performance"):
+            evidence.require_exact_match()
+
+    def test_declared_match_cannot_disagree_with_candidate_sets(self) -> None:
+        raw = json.loads(NEGATIVE)
+        raw["exact_candidate_set_match"] = True
+        payload = canonical_payload(raw)
+        with self.assertRaisesRegex(FlatBooleanKvWgpuParityError, "disagrees"):
+            FlatBooleanKvWgpuParityV1.from_canonical_json_bytes(payload)
+
+    def test_noncanonical_reordered_payload_is_rejected(self) -> None:
+        raw = json.loads(POSITIVE)
+        payload = json.dumps(raw, indent=2).encode()
+        with self.assertRaises(FlatBooleanKvWgpuParityError):
+            FlatBooleanKvWgpuParityV1.from_canonical_json_bytes(payload)
+
+    def test_tail_bits_and_candidate_range_fail_closed(self) -> None:
+        raw = json.loads(POSITIVE)
+        raw["query_words_u32"][-1] = 2
+        payload = canonical_payload(raw)
+        with self.assertRaisesRegex(FlatBooleanKvWgpuParityError, "tail bits"):
+            FlatBooleanKvWgpuParityV1.from_canonical_json_bytes(payload)
+
+        raw = json.loads(POSITIVE)
+        raw["wgpu_admitted_blocks"] = [0, 3]
+        raw["exact_candidate_set_match"] = False
+        payload = canonical_payload(raw)
+        with self.assertRaisesRegex(FlatBooleanKvWgpuParityError, "outside key_count"):
+            FlatBooleanKvWgpuParityV1.from_canonical_json_bytes(payload)
+
+
+if __name__ == "__main__":
+    unittest.main()
