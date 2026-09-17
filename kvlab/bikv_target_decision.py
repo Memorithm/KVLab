@@ -7,6 +7,12 @@ interval semantics and candidate-side correctness guards before outcomes are
 inspected.  The evaluator rebuilds the paired summary from retained runs; it
 never trusts a caller-supplied aggregate.
 
+The statistical primitive remains owned by SciRust.  KVLab carries a bounded
+Python mirror only to make its evidence adapter replayable; v2 pins the exact
+qualified SciRust source revision and operation, and golden tests lock the mirror
+to that canonical worker.  A new inferential primitive must be promoted to
+SciRust rather than invented here.
+
 A decision record is evidence about the declared campaign only.  It does not
 open a protected holdout, authorize BKV-K9/NBKV, or turn logical byte counts
 into physical traffic claims.
@@ -19,7 +25,6 @@ from fractions import Fraction
 import hashlib
 import json
 import math
-import statistics
 from typing import Any, Iterable, Mapping
 
 from .bikv_target_analysis_plan import BikvTargetAnalysisPlanV1
@@ -37,8 +42,10 @@ BKV_TARGET_DECISION_PLAN_SCHEMA_V2 = "kvlab.bikv-target-decision-plan.v2"
 BKV_TARGET_DECISION_SCHEMA_V1 = "kvlab.bikv-target-decision.v1"
 EFFECT_STATISTICS = frozenset({"paired_mean", "paired_median"})
 BOOTSTRAP_QUANTILE_METHOD = "linear_type7"
-T_INTERVAL_METHOD = "student_t_equal_tail"
 DECISION_ORIENTATION = "improvement_positive"
+SCIRUST_STATS_SOURCE_COMMIT = "be7fcca3b31cedf722d71a2a56db8f6d088037cf"
+SCIRUST_STATS_SCHEMA = "scirust-research-stats-json/v1"
+SCIRUST_STATS_OPERATION = "paired_mean_percentile"
 GUARD_OPERATORS = frozenset({"ge", "le", "eq_true"})
 CORE_GUARDED_METRICS = frozenset(
     {
@@ -57,7 +64,9 @@ _PLAN_FIELDS = frozenset(
         "primary_statistic",
         "quality_statistic",
         "bootstrap_quantile_method",
-        "t_interval_method",
+        "statistics_schema",
+        "statistics_source_commit",
+        "statistics_operation",
         "decision_orientation",
         "candidate_metric_guards",
     }
@@ -138,8 +147,10 @@ class BikvTargetDecisionPlanV2:
     base_plan: BikvTargetAnalysisPlanV1
     primary_statistic: str
     quality_statistic: str
-    bootstrap_quantile_method: str | None
-    t_interval_method: str | None
+    bootstrap_quantile_method: str
+    statistics_schema: str
+    statistics_source_commit: str
+    statistics_operation: str
     decision_orientation: str
     candidate_metric_guards: tuple[BikvCandidateMetricGuardV1, ...]
 
@@ -159,37 +170,53 @@ class BikvTargetDecisionPlanV2:
             raise BikvTargetDecisionError(
                 f"decision_orientation must be {DECISION_ORIENTATION!r}"
             )
-        if self.base_plan.uncertainty_method == "paired_percentile_bootstrap":
-            if (
-                self.base_plan.bootstrap_seed is None
-                or self.base_plan.bootstrap_seed > (1 << 64) - 1
-            ):
-                raise BikvTargetDecisionError(
-                    "v2 SplitMix64 bootstrap requires bootstrap_seed to fit u64"
-                )
-            if self.bootstrap_quantile_method != BOOTSTRAP_QUANTILE_METHOD:
-                raise BikvTargetDecisionError(
-                    f"bootstrap_quantile_method must be {BOOTSTRAP_QUANTILE_METHOD!r}"
-                )
-            if self.t_interval_method is not None:
-                raise BikvTargetDecisionError(
-                    "bootstrap plan must not carry a t-interval method"
-                )
-        elif self.base_plan.uncertainty_method == "paired_t_interval":
-            if self.t_interval_method != T_INTERVAL_METHOD:
-                raise BikvTargetDecisionError(
-                    f"t_interval_method must be {T_INTERVAL_METHOD!r}"
-                )
-            if self.bootstrap_quantile_method is not None:
-                raise BikvTargetDecisionError(
-                    "paired-t plan must not carry a bootstrap quantile method"
-                )
-            if self.primary_statistic != "paired_mean" or self.quality_statistic != "paired_mean":
-                raise BikvTargetDecisionError(
-                    "paired_t_interval requires paired_mean primary and quality statistics"
-                )
-        else:  # base-plan v1 already rejects this; retain fail-closed boundary.
-            raise BikvTargetDecisionError("unsupported uncertainty method")
+        if self.base_plan.uncertainty_method != "paired_percentile_bootstrap":
+            raise BikvTargetDecisionError(
+                "v2 evaluator requires SciRust paired_mean_percentile; "
+                "paired_t_interval remains unsupported until a canonical SciRust primitive is qualified"
+            )
+        if self.primary_statistic != "paired_mean" or self.quality_statistic != "paired_mean":
+            raise BikvTargetDecisionError(
+                "SciRust paired_mean_percentile requires paired_mean primary and quality statistics"
+            )
+        if (
+            self.base_plan.bootstrap_seed is None
+            or self.base_plan.bootstrap_seed > (1 << 64) - 1
+        ):
+            raise BikvTargetDecisionError(
+                "SciRust SplitMix64 bootstrap requires bootstrap_seed to fit u64"
+            )
+        if (
+            self.base_plan.bootstrap_resamples is None
+            or not 100 <= self.base_plan.bootstrap_resamples <= 100_000
+        ):
+            raise BikvTargetDecisionError(
+                "SciRust paired_mean_percentile requires 100..=100000 resamples"
+            )
+        if not 2 <= self.base_plan.required_complete_pairs <= 10_000:
+            raise BikvTargetDecisionError(
+                "SciRust paired_mean_percentile requires 2..=10000 paired units"
+            )
+        if self.base_plan.required_complete_pairs * self.base_plan.bootstrap_resamples > 10_000_000:
+            raise BikvTargetDecisionError(
+                "SciRust paired_mean_percentile sampled-scalar budget exceeds 10000000"
+            )
+        if self.bootstrap_quantile_method != BOOTSTRAP_QUANTILE_METHOD:
+            raise BikvTargetDecisionError(
+                f"bootstrap_quantile_method must be {BOOTSTRAP_QUANTILE_METHOD!r}"
+            )
+        if self.statistics_schema != SCIRUST_STATS_SCHEMA:
+            raise BikvTargetDecisionError(
+                f"statistics_schema must be {SCIRUST_STATS_SCHEMA!r}"
+            )
+        if self.statistics_source_commit != SCIRUST_STATS_SOURCE_COMMIT:
+            raise BikvTargetDecisionError(
+                "v2 decision semantics must bind the qualified SciRust statistics source commit"
+            )
+        if self.statistics_operation != SCIRUST_STATS_OPERATION:
+            raise BikvTargetDecisionError(
+                f"statistics_operation must be {SCIRUST_STATS_OPERATION!r}"
+            )
 
         if not isinstance(self.candidate_metric_guards, tuple):
             raise BikvTargetDecisionError("candidate_metric_guards must be a tuple")
@@ -217,7 +244,9 @@ class BikvTargetDecisionPlanV2:
             "primary_statistic": self.primary_statistic,
             "quality_statistic": self.quality_statistic,
             "bootstrap_quantile_method": self.bootstrap_quantile_method,
-            "t_interval_method": self.t_interval_method,
+            "statistics_schema": self.statistics_schema,
+            "statistics_source_commit": self.statistics_source_commit,
+            "statistics_operation": self.statistics_operation,
             "decision_orientation": self.decision_orientation,
             "candidate_metric_guards": [guard.to_dict() for guard in self.candidate_metric_guards],
         }
@@ -247,7 +276,9 @@ class BikvTargetDecisionPlanV2:
             primary_statistic=raw["primary_statistic"],
             quality_statistic=raw["quality_statistic"],
             bootstrap_quantile_method=raw["bootstrap_quantile_method"],
-            t_interval_method=raw["t_interval_method"],
+            statistics_schema=raw["statistics_schema"],
+            statistics_source_commit=raw["statistics_source_commit"],
+            statistics_operation=raw["statistics_operation"],
             decision_orientation=raw["decision_orientation"],
             candidate_metric_guards=tuple(
                 BikvCandidateMetricGuardV1.from_mapping(item) for item in guards_raw
@@ -337,21 +368,49 @@ class _SplitMix64:
     def randbelow(self, bound: int) -> int:
         if bound < 1:
             raise BikvTargetDecisionError("bootstrap sample bound must be positive")
-        limit = (1 << 64) - ((1 << 64) % bound)
+        threshold = ((1 << 64) - bound) % bound
         while True:
             value = self.next_u64()
-            if value < limit:
+            if value >= threshold:
                 return value % bound
 
 
+def _compensated_mean(values: list[float]) -> float:
+    """Mirror SciRust resampling::checked_mean for the adapter record."""
+    if not values or any(not math.isfinite(value) for value in values):
+        raise BikvTargetDecisionError("paired mean requires finite non-empty values")
+    total = 0.0
+    correction = 0.0
+    overflowed = False
+    for value in values:
+        nxt = total + value
+        if not math.isfinite(nxt):
+            overflowed = True
+            break
+        correction += (total - nxt) + value if abs(total) >= abs(value) else (value - nxt) + total
+        if not math.isfinite(correction):
+            raise BikvTargetDecisionError("paired mean compensation became non-finite")
+        total = nxt
+    if not overflowed:
+        result = (total + correction) / len(values)
+    else:
+        scale = max(abs(value) for value in values)
+        if scale == 0.0 or not math.isfinite(scale):
+            raise BikvTargetDecisionError("paired mean overflow scaling is invalid")
+        scaled = [value / scale for value in values]
+        scaled_mean = _compensated_mean(scaled)
+        result = scaled_mean * scale
+    if not math.isfinite(result):
+        raise BikvTargetDecisionError("paired mean result is non-finite")
+    return result
+
+
 def _statistic(values: list[float], name: str) -> float:
-    if not values:
-        raise BikvTargetDecisionError("cannot compute effect statistic from zero pairs")
-    if name == "paired_mean":
-        return float(statistics.fmean(values))
-    if name == "paired_median":
-        return float(statistics.median(values))
-    raise BikvTargetDecisionError(f"unsupported effect statistic {name!r}")
+    if name != "paired_mean":
+        raise BikvTargetDecisionError(
+            "v2 evaluator supports only canonical SciRust paired_mean_percentile"
+        )
+    return _compensated_mean(values)
 
 
 def _type7_quantile(sorted_values: list[float], probability: Fraction) -> float:
@@ -380,98 +439,6 @@ def _bootstrap_interval(
     draws.sort()
     tail = Fraction(1_000_000 - confidence_ppm, 2_000_000)
     return observed, _type7_quantile(draws, tail), _type7_quantile(draws, 1 - tail)
-
-
-def _betacf(a: float, b: float, x: float) -> float:
-    """Continued fraction for the regularized incomplete beta function."""
-    max_iter = 300
-    eps = 3.0e-14
-    fpmin = 1.0e-300
-    qab = a + b
-    qap = a + 1.0
-    qam = a - 1.0
-    c = 1.0
-    d = 1.0 - qab * x / qap
-    if abs(d) < fpmin:
-        d = fpmin
-    d = 1.0 / d
-    h = d
-    for m in range(1, max_iter + 1):
-        m2 = 2 * m
-        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
-        d = 1.0 + aa * d
-        if abs(d) < fpmin:
-            d = fpmin
-        c = 1.0 + aa / c
-        if abs(c) < fpmin:
-            c = fpmin
-        d = 1.0 / d
-        h *= d * c
-        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
-        d = 1.0 + aa * d
-        if abs(d) < fpmin:
-            d = fpmin
-        c = 1.0 + aa / c
-        if abs(c) < fpmin:
-            c = fpmin
-        d = 1.0 / d
-        delta = d * c
-        h *= delta
-        if abs(delta - 1.0) <= eps:
-            return h
-    raise BikvTargetDecisionError("incomplete-beta continued fraction did not converge")
-
-
-def _regularized_beta(x: float, a: float, b: float) -> float:
-    if x <= 0.0:
-        return 0.0
-    if x >= 1.0:
-        return 1.0
-    bt = math.exp(
-        math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b)
-        + a * math.log(x) + b * math.log1p(-x)
-    )
-    if x < (a + 1.0) / (a + b + 2.0):
-        return bt * _betacf(a, b, x) / a
-    return 1.0 - bt * _betacf(b, a, 1.0 - x) / b
-
-
-def _student_t_cdf(value: float, degrees_freedom: int) -> float:
-    if degrees_freedom < 1:
-        raise BikvTargetDecisionError("Student-t interval requires positive degrees of freedom")
-    if value == 0.0:
-        return 0.5
-    x = degrees_freedom / (degrees_freedom + value * value)
-    ibeta = _regularized_beta(x, degrees_freedom / 2.0, 0.5)
-    return 1.0 - 0.5 * ibeta if value > 0 else 0.5 * ibeta
-
-
-def _student_t_quantile(probability: float, degrees_freedom: int) -> float:
-    if not 0.5 < probability < 1.0:
-        raise BikvTargetDecisionError("upper Student-t probability must be in (0.5, 1)")
-    low, high = 0.0, 1.0
-    while _student_t_cdf(high, degrees_freedom) < probability:
-        high *= 2.0
-        if high > 1.0e8:
-            raise BikvTargetDecisionError("failed to bracket Student-t quantile")
-    for _ in range(100):
-        mid = (low + high) / 2.0
-        if _student_t_cdf(mid, degrees_freedom) < probability:
-            low = mid
-        else:
-            high = mid
-    return (low + high) / 2.0
-
-
-def _paired_t_interval(values: list[float], confidence_ppm: int) -> tuple[float, float, float]:
-    if len(values) < 2:
-        raise BikvTargetDecisionError("paired_t_interval requires at least two complete pairs")
-    mean = float(statistics.fmean(values))
-    stddev = statistics.stdev(values)
-    alpha_half = (1_000_000 - confidence_ppm) / 2_000_000.0
-    critical = _student_t_quantile(1.0 - alpha_half, len(values) - 1)
-    half_width = critical * stddev / math.sqrt(len(values))
-    return mean, mean - half_width, mean + half_width
 
 
 def _improvements(metric: PairedMetricSummaryV1, direction: str) -> list[float]:
@@ -526,17 +493,14 @@ def _interval_decision(
         )
     base = plan.base_plan
     try:
-        if base.uncertainty_method == "paired_percentile_bootstrap":
-            assert base.bootstrap_resamples is not None and base.bootstrap_seed is not None
-            point, low, high = _bootstrap_interval(
-                values,
-                statistic=statistic,
-                confidence_ppm=base.confidence_level_ppm,
-                resamples=base.bootstrap_resamples,
-                seed=base.bootstrap_seed,
-            )
-        else:
-            point, low, high = _paired_t_interval(values, base.confidence_level_ppm)
+        assert base.bootstrap_resamples is not None and base.bootstrap_seed is not None
+        point, low, high = _bootstrap_interval(
+            values,
+            statistic=statistic,
+            confidence_ppm=base.confidence_level_ppm,
+            resamples=base.bootstrap_resamples,
+            seed=base.bootstrap_seed,
+        )
     except BikvTargetDecisionError as exc:
         return BikvIntervalDecisionV1(
             metric=metric.name,

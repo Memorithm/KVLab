@@ -14,11 +14,13 @@ from kvlab.bikv_target_decision import (
     BKV_TARGET_DECISION_PLAN_SCHEMA_V2,
     BOOTSTRAP_QUANTILE_METHOD,
     DECISION_ORIENTATION,
-    T_INTERVAL_METHOD,
+    SCIRUST_STATS_OPERATION,
+    SCIRUST_STATS_SCHEMA,
+    SCIRUST_STATS_SOURCE_COMMIT,
     BikvCandidateMetricGuardV1,
     BikvTargetDecisionError,
     BikvTargetDecisionPlanV2,
-    _student_t_quantile,
+    _bootstrap_interval,
     evaluate_target_campaign,
 )
 from kvlab.bikv_target_protocol import (
@@ -113,14 +115,15 @@ class BikvTargetDecisionTests(unittest.TestCase):
         )
 
     def decision_plan(self, protocol, *, uncertainty="paired_percentile_bootstrap"):
-        bootstrap = uncertainty == "paired_percentile_bootstrap"
         return BikvTargetDecisionPlanV2(
             schema=BKV_TARGET_DECISION_PLAN_SCHEMA_V2,
             base_plan=self.base_plan(protocol, uncertainty=uncertainty),
             primary_statistic="paired_mean",
             quality_statistic="paired_mean",
-            bootstrap_quantile_method=BOOTSTRAP_QUANTILE_METHOD if bootstrap else None,
-            t_interval_method=None if bootstrap else T_INTERVAL_METHOD,
+            bootstrap_quantile_method=BOOTSTRAP_QUANTILE_METHOD,
+            statistics_schema=SCIRUST_STATS_SCHEMA,
+            statistics_source_commit=SCIRUST_STATS_SOURCE_COMMIT,
+            statistics_operation=SCIRUST_STATS_OPERATION,
             decision_orientation=DECISION_ORIENTATION,
             candidate_metric_guards=self.guards(),
         )
@@ -255,6 +258,20 @@ class BikvTargetDecisionTests(unittest.TestCase):
         with self.assertRaisesRegex(BikvTargetDecisionError, "canonical encoding"):
             BikvTargetDecisionPlanV2.from_canonical_json(json.dumps(plan.to_dict(), indent=2))
 
+    def test_bootstrap_mirror_matches_pinned_scirust_worker_fixture(self):
+        # SciRust be7fcca3..., scirust-research-stats-json/v1,
+        # paired_mean_percentile([3,-1,5,2], 1000, 0.95, 20260917).
+        self.assertEqual(
+            _bootstrap_interval(
+                [3.0, -1.0, 5.0, 2.0],
+                statistic="paired_mean",
+                confidence_ppm=950_000,
+                resamples=1000,
+                seed=20260917,
+            ),
+            (2.25, -0.25, 4.25),
+        )
+
     def test_bootstrap_is_deterministic(self):
         protocol = self.protocol()
         runs = self.runs(protocol)
@@ -263,29 +280,21 @@ class BikvTargetDecisionTests(unittest.TestCase):
         self.assertEqual(left, right)
         self.assertEqual(left.decision_sha256(), right.decision_sha256())
 
-    def test_student_t_quantiles_match_reference_values(self):
-        self.assertAlmostEqual(_student_t_quantile(0.975, 1), 12.7062047364, places=7)
-        self.assertAlmostEqual(_student_t_quantile(0.975, 10), 2.2281388520, places=7)
-
-    def test_paired_t_interval_evaluates_complete_pairs(self):
+    def test_paired_t_plan_is_rejected_until_scirust_owns_the_primitive(self):
         protocol = self.protocol()
-        result = self.evaluate(
-            protocol,
-            self.runs(protocol),
-            plan=self.decision_plan(protocol, uncertainty="paired_t_interval"),
-        )
-        self.assertEqual(result.disposition, "candidate_meets_preregistered_gate")
-        self.assertTrue(result.primary.passed)
+        plan = self.decision_plan(protocol, uncertainty="paired_t_interval")
+        with self.assertRaisesRegex(
+            BikvTargetDecisionError, "canonical SciRust primitive"
+        ):
+            plan.validate_against(protocol)
 
-    def test_paired_t_interval_with_one_pair_blocks_inference(self):
-        protocol = self.protocol(seeds=(7,), repetitions=1)
-        result = self.evaluate(
-            protocol,
-            self.runs(protocol),
-            plan=self.decision_plan(protocol, uncertainty="paired_t_interval"),
+    def test_statistics_source_binding_cannot_drift(self):
+        protocol = self.protocol()
+        plan = dataclasses.replace(
+            self.decision_plan(protocol), statistics_source_commit="0" * 40
         )
-        self.assertEqual(result.disposition, "blocked_incomplete_evidence")
-        self.assertIn("at least two", result.primary.blocker)
+        with self.assertRaisesRegex(BikvTargetDecisionError, "qualified SciRust"):
+            plan.validate_against(protocol)
 
 
 if __name__ == "__main__":
