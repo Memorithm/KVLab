@@ -40,9 +40,12 @@ The v2 observation can now be verified fail-closed against both the retained
 `kvlab.bikv-evidence-bundle.v1` and the frozen
 `kvlab.bikv-target-protocol.v1`. The binding requires exact agreement on the
 evidence-bundle SHA-256, target hardware fingerprint, timing source and both
-byte-evidence kinds. This prevents a syntactically valid first-token observation
-from being replayed under a different target protocol or from silently mixing
-logical byte accounting with a physical traffic counter.
+byte-evidence kinds. The observation producer commit must also equal the frozen
+FLAT revision and the same producer repository/commit pair must occur in the
+retained evidence bundle. This prevents a syntactically valid first-token
+observation from being replayed under a different target protocol, attached to
+an unretained producer identity, or from silently mixing logical byte accounting
+with a physical traffic counter.
 
 `tools/verify_bikv_first_token_observation.py` performs this check on canonical
 JSON inputs and emits only verified identities and recorded observation fields.
