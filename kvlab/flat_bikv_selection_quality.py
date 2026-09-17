@@ -2,7 +2,7 @@
 
 FLAT owns Boolean-KV page routing and the canonical producer encoding. KVLab
 owns experimental protocol, target construction, retention and interpretation.
-This module accepts the candidate ``flat.bikv-selection-quality.v1`` envelope,
+This module accepts the qualified ``flat.bikv-selection-quality.v1`` envelope,
 revalidates the embedded FLAT selection, recomputes every set-quality metric,
 requires canonical producer bytes and derives SHA-256 identities for retention.
 
@@ -24,10 +24,9 @@ from .flat_bikv_selection_binding import (
 )
 
 FLAT_BIKV_SELECTION_QUALITY_SCHEMA = "flat.bikv-selection-quality.v1"
-# Candidate producer head for FLAT-ATTENTION #252. This is deliberately not
-# called a final reference revision until the producer PR is qualified/merged.
-FLAT_BIKV_SELECTION_QUALITY_CANDIDATE_REVISION = (
-    "148c73eaf21096a0b0cc539b9a474387aa6c7af0"
+# Qualified producer merge for FLAT-ATTENTION #252.
+FLAT_BIKV_SELECTION_QUALITY_REFERENCE_REVISION = (
+    "dfd5fb7a90242b5e95c3946186864f56c83930bd"
 )
 
 _U64_MAX = (1 << 64) - 1

@@ -3,7 +3,7 @@ import json
 import unittest
 
 from kvlab.flat_bikv_selection_quality import (
-    FLAT_BIKV_SELECTION_QUALITY_CANDIDATE_REVISION,
+    FLAT_BIKV_SELECTION_QUALITY_REFERENCE_REVISION,
     FlatBikvSelectionQualityError,
     FlatBikvSelectionQualityV1,
 )
@@ -117,8 +117,8 @@ class FlatBikvSelectionQualityTests(unittest.TestCase):
         self.assertEqual(evidence.quality_sha256, hashlib.sha256(payload).hexdigest())
         self.assertEqual(len(evidence.selection_sha256), 64)
         self.assertEqual(
-            FLAT_BIKV_SELECTION_QUALITY_CANDIDATE_REVISION,
-            "148c73eaf21096a0b0cc539b9a474387aa6c7af0",
+            FLAT_BIKV_SELECTION_QUALITY_REFERENCE_REVISION,
+            "dfd5fb7a90242b5e95c3946186864f56c83930bd",
         )
 
     def test_rejects_metric_drift(self):
