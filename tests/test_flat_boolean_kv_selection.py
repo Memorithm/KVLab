@@ -30,7 +30,7 @@ class FlatBooleanKvSelectionTests(unittest.TestCase):
         self.assertEqual(len(selection.selection_sha256()), 64)
         self.assertEqual(
             FLAT_BOOLEAN_KV_SELECTION_REFERENCE_REVISION,
-            "c1249bad4fd3f41c93a35f8a6204c98de9a3b687",
+            "155a7bb64ba60fe023cfb6dd9d83e577fb907e0c",
         )
         self.assertEqual([page.logical_page for page in selection.selected_pages], [1, 2])
 
@@ -41,8 +41,7 @@ class FlatBooleanKvSelectionTests(unittest.TestCase):
 
     def test_checksum_tampering_is_rejected(self) -> None:
         raw = json.loads(FLAT_REFERENCE_FIXTURE)
-        raw["selected_numerical_kv_bytes"] = 320
-        raw["avoided_numerical_kv_bytes"] = 320
+        raw["generation"] = 1
         payload = json.dumps(raw, separators=(",", ":")).encode()
         with self.assertRaisesRegex(FlatBooleanKvSelectionError, "checksum"):
             FlatBooleanKvSelectionV1.from_canonical_json_bytes(payload)
@@ -75,6 +74,16 @@ class FlatBooleanKvSelectionTests(unittest.TestCase):
         raw["claim"] = "physical_dram_saved"
         payload = json.dumps(raw, separators=(",", ":")).encode()
         with self.assertRaisesRegex(FlatBooleanKvSelectionError, "fields/order"):
+            FlatBooleanKvSelectionV1.from_canonical_json_bytes(payload)
+
+    def test_selected_byte_drift_is_rejected_even_when_total_is_conserved(self) -> None:
+        raw = json.loads(FLAT_REFERENCE_FIXTURE)
+        raw["selected_numerical_kv_bytes"] = 320
+        raw["avoided_numerical_kv_bytes"] = 320
+        payload = json.dumps(raw, separators=(",", ":")).encode()
+        with self.assertRaisesRegex(
+            FlatBooleanKvSelectionError, "selected numerical bytes"
+        ):
             FlatBooleanKvSelectionV1.from_canonical_json_bytes(payload)
 
 

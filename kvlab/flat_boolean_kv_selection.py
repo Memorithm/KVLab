@@ -17,7 +17,7 @@ from typing import Any
 
 FLAT_BOOLEAN_KV_SELECTION_SCHEMA = "flat.boolean-kv-selection.v1"
 FLAT_BOOLEAN_KV_SELECTION_REFERENCE_REVISION = (
-    "c1249bad4fd3f41c93a35f8a6204c98de9a3b687"
+    "155a7bb64ba60fe023cfb6dd9d83e577fb907e0c"
 )
 _U64_MAX = (1 << 64) - 1
 _TOP_FIELDS = (
@@ -131,6 +131,29 @@ class FlatBooleanKvSelectionV1:
             raise FlatBooleanKvSelectionError("selected page count exceeds mapped_pages")
         if selected_bytes + avoided_bytes != full_bytes:
             raise FlatBooleanKvSelectionError("numerical byte accounting is inconsistent")
+        if (live_tokens == 0) != (mapped_pages == 0):
+            raise FlatBooleanKvSelectionError(
+                "live-token/page cardinality is inconsistent"
+            )
+        if live_tokens == 0:
+            if full_bytes or selected_bytes or avoided_bytes or self.selected_pages:
+                raise FlatBooleanKvSelectionError(
+                    "empty selection must retain zero numerical bytes and no selected pages"
+                )
+        else:
+            if full_bytes % live_tokens:
+                raise FlatBooleanKvSelectionError(
+                    "full numerical bytes are not an integral bytes-per-token accounting"
+                )
+            bytes_per_token = full_bytes // live_tokens
+            selected_live_tokens = sum(page.live_tokens for page in self.selected_pages)
+            if (
+                selected_live_tokens > live_tokens
+                or selected_live_tokens * bytes_per_token != selected_bytes
+            ):
+                raise FlatBooleanKvSelectionError(
+                    "selected numerical bytes do not match selected live tokens"
+                )
         if mapped_pages and boolean_bytes == 0:
             raise FlatBooleanKvSelectionError(
                 "mapped pages require non-zero Boolean key bytes read"
