@@ -42,3 +42,25 @@ quality, or a favorable `numerical_KV_bytes_avoided / Boolean_KV_bytes_read`
 ratio. Those claims require actual retained observations under the frozen
 protocol and the BKV-K9 gate in issue #111 remains closed until that evidence
 exists.
+
+## Campaign completeness manifest
+
+`kvlab.bikv-target-campaign.v1` binds the complete retained attempt set for one
+frozen target protocol. A valid manifest requires exactly one `baseline` and one
+`candidate` record for every frozen `(seed, repetition_index)` slot, assigns each
+slot the exact `kvlab.bikv-target-run.v1` SHA-256, rejects duplicate attempt IDs
+or reused run payloads, and canonicalizes ordering independently of filesystem or
+execution order. Failed attempts remain valid *retained slots* rather than being
+dropped; their failed status is preserved by the referenced run hash and does
+not become a successful measurement.
+
+The manifest is a completeness/provenance gate only. It computes no aggregate,
+uncertainty interval, H0/H1 verdict, performance ratio, recall result, quality
+result or promotion decision. Those interpretations remain blocked until the
+referenced target-host/model measurements exist and satisfy their separately
+preregistered decision rules.
+
+`tools/verify_bikv_target_campaign.py PROTOCOL CAMPAIGN RUN...` verifies canonical
+manifest encoding, exact protocol identity, every retained run hash and complete
+baseline/candidate slot coverage. Its output is limited to provenance/status counts
+and content identities; a failed retained attempt remains failed evidence.
