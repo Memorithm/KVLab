@@ -15,6 +15,7 @@ from .bikv_first_token import (
 )
 from .bikv_evidence_bundle import BikvEvidenceBundleV1
 from .bikv_target_protocol import BikvTargetProtocolV1
+from .bikv_target_run import BikvTargetRunError, BikvTargetRunV1
 from .bikv_traffic import BikvTrafficEvidence, BikvTrafficEvidenceError
 
 
@@ -149,6 +150,57 @@ class BikvK8FirstTokenObservationV2:
             raise BikvFirstTokenObservationError(
                 "Boolean byte evidence kind does not match frozen target protocol"
             )
+
+    def validate_against_target_run(
+        self,
+        *,
+        evidence_bundle: BikvEvidenceBundleV1,
+        protocol: BikvTargetProtocolV1,
+        run: BikvTargetRunV1,
+    ) -> None:
+        """Bind this K8 observation to one exact completed candidate attempt.
+
+        The shared first-token/Boolean-byte metrics must be explicitly measured
+        by the retained target run with canonical units and must equal this
+        observation exactly.  This is a provenance consistency check, not an
+        estimator for TPOT, quality, or a performance decision.
+        """
+
+        self.validate_against(evidence_bundle=evidence_bundle, protocol=protocol)
+        try:
+            run.validate_against(protocol)
+        except BikvTargetRunError as exc:
+            raise BikvFirstTokenObservationError(str(exc)) from exc
+        if run.variant != "candidate":
+            raise BikvFirstTokenObservationError(
+                "BKV-K8 first-token observation must bind to a candidate target run"
+            )
+        if run.status != "completed":
+            raise BikvFirstTokenObservationError(
+                "BKV-K8 first-token observation must bind to a completed target run"
+            )
+
+        measured = {metric.name: metric for metric in run.metrics}
+        expected = {
+            "first_token_latency_ns": (self.first_token_latency_ns, "ns"),
+            "boolean_frontend_ns": (self.boolean_frontend_ns, "ns"),
+            "numerical_kv_bytes_avoided": (self.numerical_kv_bytes_avoided, "bytes"),
+            "boolean_kv_bytes_read": (self.boolean_kv_bytes_read, "bytes"),
+        }
+        for name, (value, unit) in expected.items():
+            metric = measured[name]
+            if metric.status != "measured":
+                raise BikvFirstTokenObservationError(
+                    f"target run metric {name} must be measured for BKV-K8 binding"
+                )
+            if metric.unit != unit:
+                raise BikvFirstTokenObservationError(
+                    f"target run metric {name} must use canonical unit {unit}"
+                )
+            if metric.value != value:
+                raise BikvFirstTokenObservationError(
+                    f"target run metric {name} does not match BKV-K8 observation"
+                )
 
     def numerical_to_boolean_bytes_ratio(self) -> Fraction | None:
         """Return an exact ratio only for like-for-like byte evidence."""
