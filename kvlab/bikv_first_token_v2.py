@@ -121,6 +121,18 @@ class BikvK8FirstTokenObservationV2:
             raise BikvFirstTokenObservationError(
                 "protocol evidence_bundle_sha256 does not match retained evidence bundle"
             )
+        if self.producer_commit != protocol.flat_commit:
+            raise BikvFirstTokenObservationError(
+                "observation producer commit does not match frozen FLAT revision"
+            )
+        if not any(
+            entry.producer_repo == self.producer_repo
+            and entry.producer_commit == self.producer_commit
+            for entry in evidence_bundle.entries
+        ):
+            raise BikvFirstTokenObservationError(
+                "observation producer identity is not retained in evidence bundle"
+            )
         if self.hardware_fingerprint_sha256 != protocol.hardware_fingerprint_sha256:
             raise BikvFirstTokenObservationError(
                 "observation hardware fingerprint does not match frozen target protocol"

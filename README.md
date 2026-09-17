@@ -83,7 +83,7 @@ The preregistration boundary is now explicit through `kvlab.bikv-target-analysis
 The next fail-closed layer is now implemented as `kvlab.bikv-target-decision-plan.v2` plus `kvlab.bikv-target-decision.v1` (`docs/BKV-K6-DECISION-EVALUATOR.md`). It freezes the previously implicit paired effect statistic and interval convention, requires explicit candidate-side recall/FNR/O/LSE/reset guards, rebuilds the paired summary from retained runs, and records pass, negative, or incomplete-evidence dispositions without opening BKV-K9. No concrete target-host/model outcome is added by this evaluator infrastructure.
 
 
-BKV-K8 first-token observations now have an explicit protocol-binding verifier: the canonical v2 record must match the retained BIKV evidence bundle and frozen target protocol on evidence identity, hardware fingerprint, timing source and byte-evidence kind before it can be retained as campaign evidence. This closes a provenance/replay gap only; no first-token latency result, traffic reduction, model-quality result or BKV-K9/BKV-K11 promotion is added by the verifier.
+BKV-K8 first-token observations now have an explicit protocol-binding verifier: the canonical v2 record must match the retained BIKV evidence bundle and frozen target protocol on evidence identity, producer identity/frozen FLAT revision, hardware fingerprint, timing source and byte-evidence kind before it can be retained as campaign evidence. This closes a provenance/replay gap only; no first-token latency result, traffic reduction, model-quality result or BKV-K9/BKV-K11 promotion is added by the verifier.
 
 ## Canon
 

@@ -121,6 +121,24 @@ class BikvFirstTokenProtocolBindingTests(unittest.TestCase):
                 protocol=protocol,
             )
 
+    def test_producer_commit_must_match_frozen_flat_revision(self) -> None:
+        bundle = _bundle()
+        protocol = _protocol(bundle)
+        with self.assertRaisesRegex(BikvFirstTokenObservationError, "frozen FLAT revision"):
+            _observation(bundle, producer_commit="8" * 40).validate_against(
+                evidence_bundle=bundle,
+                protocol=protocol,
+            )
+
+    def test_producer_identity_must_be_retained_in_bundle(self) -> None:
+        bundle = _bundle()
+        protocol = _protocol(bundle)
+        with self.assertRaisesRegex(BikvFirstTokenObservationError, "not retained in evidence bundle"):
+            _observation(bundle, producer_repo="Memorithm/other-producer").validate_against(
+                evidence_bundle=bundle,
+                protocol=protocol,
+            )
+
     def test_hardware_or_timing_drift_fails_closed(self) -> None:
         bundle = _bundle()
         protocol = _protocol(bundle)
