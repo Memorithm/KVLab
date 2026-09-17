@@ -27,7 +27,7 @@ FLAT_BIKV_SELECTION_QUALITY_SCHEMA = "flat.bikv-selection-quality.v1"
 # Candidate producer head for FLAT-ATTENTION #252. This is deliberately not
 # called a final reference revision until the producer PR is qualified/merged.
 FLAT_BIKV_SELECTION_QUALITY_CANDIDATE_REVISION = (
-    "6fdcaf38c1be7d7f4a70fac6d7b8aa6f214db124"
+    "148c73eaf21096a0b0cc539b9a474387aa6c7af0"
 )
 
 _U64_MAX = (1 << 64) - 1

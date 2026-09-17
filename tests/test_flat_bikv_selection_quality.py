@@ -118,7 +118,7 @@ class FlatBikvSelectionQualityTests(unittest.TestCase):
         self.assertEqual(len(evidence.selection_sha256), 64)
         self.assertEqual(
             FLAT_BIKV_SELECTION_QUALITY_CANDIDATE_REVISION,
-            "6fdcaf38c1be7d7f4a70fac6d7b8aa6f214db124",
+            "148c73eaf21096a0b0cc539b9a474387aa6c7af0",
         )
 
     def test_rejects_metric_drift(self):
