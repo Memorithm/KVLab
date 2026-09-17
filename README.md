@@ -76,6 +76,8 @@ The target-host/model campaign inputs are now frozen by `kvlab.bikv-target-proto
 
 The corresponding per-attempt retention contract `kvlab.bikv-target-run.v1` (`docs/BKV-K6-TARGET-RUN.md`) binds baseline/candidate attempts to that exact protocol and requires every frozen metric obligation to be retained explicitly as measured, not exposed, or failed. Failed attempts are first-class evidence rather than silently discarded. This is still evidence infrastructure, not a target-host/model qualification result. The companion `kvlab.bikv-target-campaign.v1` manifest now fail-closes campaign completeness by requiring exactly one baseline and one candidate attempt for every frozen seed/repetition slot and content-addressing each retained run; it performs no statistical aggregation or promotion decision.
 
+The companion `kvlab.bikv-target-paired-summary.v1` surface now verifies those retained payloads against the complete campaign manifest and emits exact seed/repetition paired descriptive deltas while retaining unavailable/failed metric states. It is intentionally non-inferential: no p-value, confidence interval, winner or BKV-K9/NBKV promotion is synthesized before a separate decision rule is frozen. See `docs/BKV-K6-PAIRED-DESCRIPTIVE-SUMMARY.md`.
+
 ## Canon
 
 See `Memorithm/scirust-hub` `CATALOG.md` and ADR-0020. Existing preregistrations remain authoritative for their campaigns. New Boolean KV experiments must be preregistered under the dedicated roadmap before confirmatory runs; the new programme extends KVLab rather than redesigning or duplicating it.
