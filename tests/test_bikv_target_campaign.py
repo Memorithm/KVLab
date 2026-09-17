@@ -186,6 +186,20 @@ class BikvTargetCampaignTests(unittest.TestCase):
         with self.assertRaisesRegex(BikvTargetCampaignError, "duplicate JSON key"):
             BikvTargetCampaignV1.from_canonical_json_bytes(duplicate)
 
+    def test_non_string_variant_and_status_fail_closed(self):
+        campaign = BikvTargetCampaignV1.from_runs(
+            protocol=self.protocol(), runs=self.complete_runs()
+        )
+        payload = campaign.canonical_json_bytes()
+        for field, replacement, expected in (
+            (b'"variant":"baseline"', b'"variant":[]', "variant"),
+            (b'"status":"completed"', b'"status":{}', "status"),
+        ):
+            malformed = payload.replace(field, replacement, 1)
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(BikvTargetCampaignError, expected):
+                    BikvTargetCampaignV1.from_canonical_json_bytes(malformed)
+
 
 if __name__ == "__main__":
     unittest.main()

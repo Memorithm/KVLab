@@ -71,7 +71,7 @@ class BikvTargetRunRefV1:
         )
 
     def validate(self) -> None:
-        if self.variant not in _VARIANT_ORDER:
+        if not isinstance(self.variant, str) or self.variant not in _VARIANT_ORDER:
             raise BikvTargetCampaignError("run variant must be baseline or candidate")
         if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
             raise BikvTargetCampaignError("run seed must be a non-negative integer")
@@ -89,7 +89,7 @@ class BikvTargetRunRefV1:
             or self.attempt_id != self.attempt_id.strip()
         ):
             raise BikvTargetCampaignError("run attempt_id must be non-empty trimmed text")
-        if self.status not in {"completed", "failed"}:
+        if not isinstance(self.status, str) or self.status not in {"completed", "failed"}:
             raise BikvTargetCampaignError("run status must be completed or failed")
         if not isinstance(self.run_sha256, str) or not _SHA256_RE.fullmatch(
             self.run_sha256
