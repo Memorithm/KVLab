@@ -1,0 +1,45 @@
+# BKV-K8 — first-token evidence record
+
+Status: **measurement/provenance contract only; no performance result is recorded by this document.**
+
+`kvlab.bkv-k8-first-token-observation.v1` is the KVLab-owned record for one
+first-token readiness observation. It is intentionally downstream of the
+retained BIKV evidence bundle and does not reimplement FLAT-ATTENTION scheduling,
+page ownership, or M13B.4 trace semantics.
+
+The record binds:
+
+- exact BIKV evidence-bundle SHA-256;
+- producer repository and exact Git commit;
+- target-host hardware-fingerprint SHA-256;
+- explicit timing source (`host_wall_clock` or `device_timestamp`);
+- first-token latency and the raw steady-state latency sample vector;
+- Boolean-front-end interval;
+- logical numerical K/V bytes avoided and Boolean K/V bytes read;
+- historical-signature-rebuild count;
+- whether the harness observed first-token Boolean-route consumption.
+
+When first-token Boolean-route consumption is asserted, historical signature
+rebuilds must be zero. This is the BKV-K8 readiness boundary: metadata intended
+to remove first-token history reconstruction cannot be described as ready while
+that reconstruction is still present.
+
+`numerical_to_boolean_bytes_ratio()` returns the exact rational
+`numerical_KV_bytes_avoided / Boolean_KV_bytes_read` when the denominator is
+non-zero. These are logical byte counters. The ratio is **not** a physical DRAM,
+PCIe, intersocket, HBM, cache-line, energy, or bandwidth measurement.
+
+This schema deliberately stores raw steady-state timing samples rather than
+converting them into a preferred estimator. Experiment-specific warmup,
+repetitions, uncertainty, baselines and decision rules remain in the frozen
+campaign protocol.
+
+## Remaining qualification
+
+Before BKV-K8 can support a promotion claim, a target-host/model campaign still
+has to retain the exact upstream evidence bundle and hardware fingerprint and
+measure, under one frozen protocol, at least first-token latency, steady-state
+TPOT, Boolean overhead, numerical K/V bytes avoided, Boolean K/V bytes read,
+candidate recall/false negatives and downstream numerical/model correctness.
+Negative or no-effect outcomes remain valid evidence. BKV-K11 adaptive placement
+is not authorized by this contract.
