@@ -1,6 +1,7 @@
 import unittest
 from fractions import Fraction
 
+from kvlab.bikv_traffic import LOGICAL_PACKED_PAYLOAD, PHYSICAL_DRAM_COUNTER
 from kvlab.boolean_kv import (
     BooleanKvCache,
     BooleanKvError,
@@ -42,7 +43,9 @@ class BooleanKvTrafficAccountingTests(unittest.TestCase):
     def test_measured_traffic_ratio_is_exact(self) -> None:
         accounting = BooleanKvTrafficAccounting(
             numerical_kv_bytes_avoided=4096,
+            numerical_evidence_kind=LOGICAL_PACKED_PAYLOAD,
             boolean_kv_bytes_read=256,
+            boolean_evidence_kind=LOGICAL_PACKED_PAYLOAD,
         )
         self.assertEqual(
             accounting.numerical_bytes_avoided_per_boolean_byte,
@@ -52,7 +55,9 @@ class BooleanKvTrafficAccountingTests(unittest.TestCase):
     def test_zero_traffic_has_no_fabricated_ratio(self) -> None:
         accounting = BooleanKvTrafficAccounting(
             numerical_kv_bytes_avoided=0,
+            numerical_evidence_kind=LOGICAL_PACKED_PAYLOAD,
             boolean_kv_bytes_read=0,
+            boolean_evidence_kind=LOGICAL_PACKED_PAYLOAD,
         )
         self.assertIsNone(accounting.numerical_bytes_avoided_per_boolean_byte)
 
@@ -60,19 +65,34 @@ class BooleanKvTrafficAccountingTests(unittest.TestCase):
         with self.assertRaises(BooleanKvError):
             BooleanKvTrafficAccounting(
                 numerical_kv_bytes_avoided=1,
+                numerical_evidence_kind=LOGICAL_PACKED_PAYLOAD,
                 boolean_kv_bytes_read=0,
+                boolean_evidence_kind=LOGICAL_PACKED_PAYLOAD,
+            )
+
+    def test_mixed_evidence_kinds_fail_closed_on_existing_accounting_api(self) -> None:
+        with self.assertRaisesRegex(BooleanKvError, "same evidence kind"):
+            BooleanKvTrafficAccounting(
+                numerical_kv_bytes_avoided=4096,
+                numerical_evidence_kind=LOGICAL_PACKED_PAYLOAD,
+                boolean_kv_bytes_read=256,
+                boolean_evidence_kind=PHYSICAL_DRAM_COUNTER,
             )
 
     def test_traffic_counts_reject_negative_and_boolean_values(self) -> None:
         with self.assertRaises(BooleanKvError):
             BooleanKvTrafficAccounting(
                 numerical_kv_bytes_avoided=-1,
+                numerical_evidence_kind=LOGICAL_PACKED_PAYLOAD,
                 boolean_kv_bytes_read=1,
+                boolean_evidence_kind=LOGICAL_PACKED_PAYLOAD,
             )
         with self.assertRaises(BooleanKvError):
             BooleanKvTrafficAccounting(
                 numerical_kv_bytes_avoided=0,
+                numerical_evidence_kind=LOGICAL_PACKED_PAYLOAD,
                 boolean_kv_bytes_read=True,
+                boolean_evidence_kind=LOGICAL_PACKED_PAYLOAD,
             )
 
 
