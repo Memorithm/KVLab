@@ -20,11 +20,10 @@ import json
 from typing import Any
 
 FLAT_BOOLEAN_KV_WGPU_PARITY_SCHEMA = "flat.boolean-kv-wgpu-parity.v1"
-# Candidate producer head in FLAT-ATTENTION PR #255. This is deliberately not a
-# qualified reference revision. Replace it with the final merge SHA only after
-# that PR's exact-head CI and material review are green.
-FLAT_BOOLEAN_KV_WGPU_PARITY_CANDIDATE_REVISION = (
-    "4ac91f6ab8a339a48e397009851b1bccc2f4a9d5"
+# Qualified FLAT-ATTENTION PR #255 squash-merge revision. New parity evidence
+# admitted by this consumer must have been produced from this exact source tree.
+FLAT_BOOLEAN_KV_WGPU_PARITY_REFERENCE_REVISION = (
+    "4a9a7cb065b067ecbdfecd3f03041e51971e856b"
 )
 
 _U32_MAX = (1 << 32) - 1
@@ -212,6 +211,10 @@ class FlatBooleanKvWgpuParityV1:
         ):
             raise FlatBooleanKvWgpuParityError(
                 "execution.source_revision must be 40 lowercase hexadecimal digits"
+            )
+        if source_revision != FLAT_BOOLEAN_KV_WGPU_PARITY_REFERENCE_REVISION:
+            raise FlatBooleanKvWgpuParityError(
+                "execution.source_revision does not match the qualified FLAT reference"
             )
         wgpu_runtime = execution["wgpu_runtime"]
         if not isinstance(wgpu_runtime, str) or not wgpu_runtime.strip():
