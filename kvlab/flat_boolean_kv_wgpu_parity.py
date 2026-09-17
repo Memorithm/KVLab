@@ -3,8 +3,8 @@
 FLAT owns WGPU routing execution and canonical producer encoding. KVLab owns the
 BKV-K7 experimental protocol and interpretation. This consumer accepts the
 ``flat.boolean-kv-wgpu-parity.v1`` record, verifies exact compact bytes,
-structural geometry, checksum, CPU/WGPU candidate-set consistency and retains a
-SHA-256 content identity.
+structural geometry, checksum, exact source/runtime/adapter execution provenance,
+CPU/WGPU candidate-set consistency and retains a SHA-256 content identity.
 
 A well-formed candidate-set mismatch is retained as negative evidence. It is
 never silently discarded, while ``require_exact_match`` fail-closes any later
@@ -24,13 +24,14 @@ FLAT_BOOLEAN_KV_WGPU_PARITY_SCHEMA = "flat.boolean-kv-wgpu-parity.v1"
 # qualified reference revision. Replace it with the final merge SHA only after
 # that PR's exact-head CI and material review are green.
 FLAT_BOOLEAN_KV_WGPU_PARITY_CANDIDATE_REVISION = (
-    "9f2e6507780ca2c3d6f6f89d3bdf297b11b805ce"
+    "4ac91f6ab8a339a48e397009851b1bccc2f4a9d5"
 )
 
 _U32_MAX = (1 << 32) - 1
 _U64_MAX = (1 << 64) - 1
 _TOP_FIELDS = (
     "schema",
+    "execution",
     "signature_bits",
     "key_count",
     "words_per_signature",
@@ -43,6 +44,16 @@ _TOP_FIELDS = (
     "parity_checksum",
 )
 _CHECKSUM_FIELDS = ("algorithm", "value")
+_EXECUTION_FIELDS = (
+    "source_revision",
+    "wgpu_runtime",
+    "adapter_name",
+    "backend",
+    "driver",
+    "driver_info",
+    "vendor",
+    "device",
+)
 
 
 class FlatBooleanKvWgpuParityError(ValueError):
@@ -155,6 +166,14 @@ class FlatBooleanKvWgpuParityV1:
 
     canonical_bytes: bytes
     parity_sha256: str
+    source_revision: str
+    wgpu_runtime: str
+    adapter_name: str
+    backend: str
+    driver: str
+    driver_info: str
+    vendor: int
+    device: int
     signature_bits: int
     key_count: int
     words_per_signature: int
@@ -179,6 +198,36 @@ class FlatBooleanKvWgpuParityV1:
             )
         if raw["schema"] != FLAT_BOOLEAN_KV_WGPU_PARITY_SCHEMA:
             raise FlatBooleanKvWgpuParityError("unsupported WGPU parity schema")
+
+        execution = raw["execution"]
+        if not isinstance(execution, dict) or tuple(execution) != _EXECUTION_FIELDS:
+            raise FlatBooleanKvWgpuParityError(
+                "execution fields/order do not match the FLAT provenance schema"
+            )
+        source_revision = execution["source_revision"]
+        if (
+            not isinstance(source_revision, str)
+            or len(source_revision) != 40
+            or any(character not in "0123456789abcdef" for character in source_revision)
+        ):
+            raise FlatBooleanKvWgpuParityError(
+                "execution.source_revision must be 40 lowercase hexadecimal digits"
+            )
+        wgpu_runtime = execution["wgpu_runtime"]
+        if not isinstance(wgpu_runtime, str) or not wgpu_runtime.strip():
+            raise FlatBooleanKvWgpuParityError(
+                "execution.wgpu_runtime must be a non-empty string"
+            )
+        string_fields = {}
+        for field in ("adapter_name", "backend", "driver", "driver_info"):
+            value = execution[field]
+            if not isinstance(value, str):
+                raise FlatBooleanKvWgpuParityError(
+                    f"execution.{field} must be a string"
+                )
+            string_fields[field] = value
+        vendor = _u32("execution.vendor", execution["vendor"])
+        device = _u32("execution.device", execution["device"])
 
         checksum = _checksum_value(raw["parity_checksum"])
         without_checksum = {
@@ -254,6 +303,14 @@ class FlatBooleanKvWgpuParityV1:
         return cls(
             canonical_bytes=payload,
             parity_sha256=hashlib.sha256(payload).hexdigest(),
+            source_revision=source_revision,
+            wgpu_runtime=wgpu_runtime,
+            adapter_name=string_fields["adapter_name"],
+            backend=string_fields["backend"],
+            driver=string_fields["driver"],
+            driver_info=string_fields["driver_info"],
+            vendor=vendor,
+            device=device,
             signature_bits=signature_bits,
             key_count=key_count,
             words_per_signature=words_per_signature,
