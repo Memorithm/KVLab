@@ -30,17 +30,42 @@ BYTE_EVIDENCE_KINDS = frozenset(
 )
 
 REQUIRED_METRICS = (
-    "first_token_latency_ns",
-    "tpot_ns_per_token",
-    "tokens_per_second",
-    "boolean_frontend_ns",
-    "numerical_kv_bytes_avoided",
-    "boolean_kv_bytes_read",
+    # Selection/correctness/quality.
+    "candidate_density",
     "candidate_recall",
     "candidate_false_negative_rate",
     "o_error",
     "lse_error",
     "downstream_quality",
+    "reset_reuse_correctness",
+    # Boolean representation and numerical-KV accounting.
+    "boolean_bits_per_token",
+    "boolean_bits_per_page",
+    "boolean_index_bytes",
+    "boolean_metadata_overhead_bytes",
+    "numerical_kv_bytes_touched",
+    "numerical_kv_bytes_avoided",
+    "boolean_kv_bytes_read",
+    "host_device_transfer_bytes",
+    "numa_traffic_bytes_when_measurable",
+    "fragmentation_bytes",
+    "allocator_overhead_bytes",
+    # BKV-K6 cooperative-pipeline transfer/synchronization surface.
+    "query_signature_transfer_bytes",
+    "candidate_bitmap_transfer_bytes",
+    "synchronization_wait_ns",
+    "dispatch_count",
+    "backpressure_wait_ns",
+    # Performance surface.
+    "boolean_search_latency_ns",
+    "boolean_frontend_ns",
+    "first_token_latency_ns",
+    "tpot_ns_per_token",
+    "tokens_per_second",
+    "pages_per_second",
+    "bits_compared_per_second",
+    "effective_bandwidth_bytes_per_second",
+    "scaling_efficiency",
 )
 
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -90,23 +115,29 @@ class BikvTargetProtocolError(ValueError):
 
 
 def _text(name: str, value: object) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str) or not value:
         raise BikvTargetProtocolError(f"{name} must be non-empty text")
-    return value.strip()
+    if value != value.strip():
+        raise BikvTargetProtocolError(f"{name} must not contain leading/trailing whitespace")
+    return value
 
 
 def _sha1(name: str, value: object) -> str:
-    text = _text(name, value).lower()
-    if not _SHA1_RE.fullmatch(text):
+    if not isinstance(value, str) or not _SHA1_RE.fullmatch(value):
         raise BikvTargetProtocolError(f"{name} must be a full lowercase 40-hex revision")
-    return text
+    return value
 
 
 def _sha256(name: str, value: object) -> str:
-    text = _text(name, value).lower()
-    if not _SHA256_RE.fullmatch(text):
+    if not isinstance(value, str) or not _SHA256_RE.fullmatch(value):
         raise BikvTargetProtocolError(f"{name} must be a lowercase 64-hex SHA-256")
-    return text
+    return value
+
+
+def _enum(name: str, value: object, allowed: frozenset[str]) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        raise BikvTargetProtocolError(f"{name} must be one of {sorted(allowed)}")
+    return value
 
 
 def _positive_int(name: str, value: object, *, minimum: int = 1) -> int:
@@ -156,8 +187,7 @@ class BikvTargetProtocolV1:
         if self.schema != BKV_TARGET_PROTOCOL_SCHEMA_V1:
             raise BikvTargetProtocolError("unsupported BIKV target protocol schema")
         _text("campaign_id", self.campaign_id)
-        if self.phase not in PHASES:
-            raise BikvTargetProtocolError(f"phase must be one of {sorted(PHASES)}")
+        _enum("phase", self.phase, PHASES)
         _text("hypothesis_h0", self.hypothesis_h0)
         _text("hypothesis_h1", self.hypothesis_h1)
         _sha256("evidence_bundle_sha256", self.evidence_bundle_sha256)
@@ -176,10 +206,7 @@ class BikvTargetProtocolV1:
         _text("dataset_id", self.dataset_id)
         _sha1("dataset_revision", self.dataset_revision)
         _text("partition_id", self.partition_id)
-        if self.partition_role not in PARTITION_ROLES:
-            raise BikvTargetProtocolError(
-                f"partition_role must be one of {sorted(PARTITION_ROLES)}"
-            )
+        _enum("partition_role", self.partition_role, PARTITION_ROLES)
         if not isinstance(self.tuning_permitted, bool):
             raise BikvTargetProtocolError("tuning_permitted must be boolean")
         if self.partition_role == "protected_holdout" and self.tuning_permitted:
@@ -199,14 +226,8 @@ class BikvTargetProtocolV1:
             raise BikvTargetProtocolError(
                 f"baseline_policy must be {BASELINE_FULL_CACHE_NATIVE_PREFILL!r}"
             )
-        if self.timing_source not in TIMING_SOURCES:
-            raise BikvTargetProtocolError(
-                f"timing_source must be one of {sorted(TIMING_SOURCES)}"
-            )
-        if self.byte_evidence_kind not in BYTE_EVIDENCE_KINDS:
-            raise BikvTargetProtocolError(
-                f"byte_evidence_kind must be one of {sorted(BYTE_EVIDENCE_KINDS)}"
-            )
+        _enum("timing_source", self.timing_source, TIMING_SOURCES)
+        _enum("byte_evidence_kind", self.byte_evidence_kind, BYTE_EVIDENCE_KINDS)
         _text("quality_metric", self.quality_metric)
         _text("quality_rule", self.quality_rule)
         _text("holdout_policy", self.holdout_policy)

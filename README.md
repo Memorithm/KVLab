@@ -68,7 +68,7 @@ Those FLAT harnesses remain correctness/provenance and host-observed timing evid
 
 The next KVLab Boolean-KV gate is therefore to retain/cross-link BIKV evidence packs under KVLab provenance and execute target-host/model measurements of Boolean overhead, numerical K/V bytes avoided, `numerical_KV_bytes_avoided / Boolean_KV_bytes_read`, first-token latency, TPOT, candidate recall/false negatives and downstream correctness before runtime promotion or adaptive placement.
 
-The target-host/model campaign inputs are now frozen by `kvlab.bikv-target-protocol.v1` (`docs/BKV-K6-TARGET-PROTOCOL.md`): exact KVLab/FLAT/model/tokenizer/runtime/dataset revisions, hardware fingerprint, precision/context/batch, seeds/warmups/repetitions, full-cache/native-prefill baseline, holdout/tuning boundary, timing/byte evidence kind and the mandatory metric set are content-addressed before execution. This is preregistration infrastructure only; it does not satisfy the BKV-K9 evidence gate without actual retained measurements.
+The target-host/model campaign inputs are now frozen by `kvlab.bikv-target-protocol.v1` (`docs/BKV-K6-TARGET-PROTOCOL.md`): exact KVLab/FLAT/model/tokenizer/runtime/dataset revisions, hardware fingerprint, precision/context/batch, seeds/warmups/repetitions, full-cache/native-prefill baseline, holdout/tuning boundary, timing/byte evidence kind and the mandatory BKV-K5/K6 correctness, memory/traffic, transfer/synchronization, backpressure and performance metric surface is content-addressed before execution. This is preregistration infrastructure only; it does not satisfy the BKV-K9 evidence gate without actual retained measurements.
 
 ## Canon
 

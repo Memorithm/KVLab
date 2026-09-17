@@ -14,16 +14,23 @@ Boolean policy and timing/byte evidence kinds. Model, tokenizer, runtime and dat
 revisions use full 40-hex immutable revisions rather than mutable tags.
 
 The dense baseline is fixed to `full-cache/native-prefill`. The metric obligation is
-also fixed and cannot be shortened by a campaign file:
+also fixed and cannot be shortened by a campaign file. It covers the complete
+roadmap surface needed by BKV-K5/K6 qualification:
 
-- first-token latency;
-- steady-state TPOT and tokens/s;
-- Boolean-front-end time;
-- numerical K/V bytes avoided;
-- Boolean K/V bytes read;
-- candidate recall and false-negative rate;
-- O and LSE error;
-- downstream quality/correctness under a preregistered metric/rule.
+- candidate density, recall, false-negative rate, O/LSE error, downstream quality,
+  and reset/reuse correctness;
+- Boolean bits/token and bits/page, total index bytes, metadata overhead,
+  numerical K/V bytes touched/avoided, Boolean bytes read, host/device transfers,
+  measurable NUMA traffic, fragmentation, and allocator overhead;
+- BKV-K6 query-signature and candidate-bitmap transfer bytes, synchronization
+  wait, dispatch count, and backpressure wait;
+- Boolean search/front-end latency, first-token latency, TPOT, tokens/s, pages/s,
+  bits compared/s, effective bandwidth, and scaling efficiency.
+
+A retained result may explicitly report a metric as unavailable/not exposed where
+its measurement surface truly does not exist, but the protocol cannot silently
+remove that obligation. Energy remains separate and may be reported only when
+measured inputs are known, as required by the roadmap.
 
 Byte accounting carries one declared evidence kind. Logical packed-byte accounting,
 host-observed transfers, device-observed transfers and physical DRAM counters remain

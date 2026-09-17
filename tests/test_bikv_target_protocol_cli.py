@@ -67,6 +67,26 @@ class BikvTargetProtocolCliTests(unittest.TestCase):
             output = json.loads(completed.stdout)
             self.assertEqual(output["protocol_sha256"], protocol.protocol_sha256())
 
+
+    def test_cli_rejects_unhashable_enum_value_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "protocol.json"
+            payload = json.loads(self.protocol().canonical_json())
+            payload["phase"] = []
+            path.write_text(
+                json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [sys.executable, "tools/verify_bikv_target_protocol.py", str(path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("phase must be one of", completed.stderr)
+            self.assertNotIn("Traceback", completed.stderr)
+
     def test_cli_rejects_noncanonical_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "protocol.json"

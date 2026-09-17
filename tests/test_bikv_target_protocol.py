@@ -89,6 +89,36 @@ class BikvTargetProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(BikvTargetProtocolError, "not canonical"):
             BikvTargetProtocolV1.from_canonical_json(payload + "\n")
 
+
+    def test_k6_transfer_and_full_roadmap_metrics_are_frozen(self):
+        required = set(REQUIRED_METRICS)
+        for metric in (
+            "query_signature_transfer_bytes",
+            "candidate_bitmap_transfer_bytes",
+            "synchronization_wait_ns",
+            "dispatch_count",
+            "backpressure_wait_ns",
+            "reset_reuse_correctness",
+            "numerical_kv_bytes_touched",
+            "pages_per_second",
+            "scaling_efficiency",
+        ):
+            self.assertIn(metric, required)
+
+    def test_rejects_noncanonical_revision_and_digest_spelling(self):
+        with self.assertRaisesRegex(BikvTargetProtocolError, "model_revision"):
+            self.protocol(model_revision="D" * 40).validate()
+        with self.assertRaisesRegex(BikvTargetProtocolError, "kvlab_commit"):
+            self.protocol(kvlab_commit=" " + "b" * 40).validate()
+        with self.assertRaisesRegex(BikvTargetProtocolError, "evidence_bundle_sha256"):
+            self.protocol(evidence_bundle_sha256="A" * 64).validate()
+
+    def test_malformed_enum_types_fail_as_protocol_errors(self):
+        for field in ("phase", "partition_role", "timing_source", "byte_evidence_kind"):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(BikvTargetProtocolError, field):
+                    self.protocol(**{field: []}).validate()
+
     def test_rejects_duplicate_seeds(self):
         with self.assertRaisesRegex(BikvTargetProtocolError, "duplicates"):
             self.protocol(seeds=(7, 7)).validate()
