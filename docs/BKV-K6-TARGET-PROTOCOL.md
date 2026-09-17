@@ -42,6 +42,7 @@ remain in the retained campaign evidence; this protocol does not define a filter
 can discard them.
 
 `tools/verify_bikv_target_protocol.py` accepts only canonical JSON and prints the
-content-derived protocol SHA-256. Campaign execution and result schemas remain
-separate work; BKV-K9 stays blocked until actual retained target-host/model evidence
-satisfies the gate in issue #111.
+content-derived protocol SHA-256. Per-attempt result retention is now defined
+separately by `kvlab.bikv-target-run.v1`; campaign execution remains separate work.
+BKV-K9 stays blocked until actual retained target-host/model evidence satisfies the
+gate in issue #111.
