@@ -93,3 +93,12 @@ BKV-K8 first-token observations now have an explicit protocol-binding verifier: 
 ## Canon
 
 See `Memorithm/scirust-hub` `CATALOG.md` and ADR-0020. Existing preregistrations remain authoritative for their campaigns. New Boolean KV experiments must be preregistered under the dedicated roadmap before confirmatory runs; the new programme extends KVLab rather than redesigning or duplicating it.
+
+## Licensing
+
+KVLab-owned source code is available under the PolyForm Noncommercial License
+1.0.0. See [LICENSE](LICENSE), [LICENSE.md](LICENSE.md), and
+[LICENSING.md](LICENSING.md). Commercial use requires a separate written
+commercial agreement from the copyright holder. Third-party dependencies,
+datasets, models, papers, and artifacts retain their own applicable terms and
+attributions.
