@@ -102,3 +102,9 @@ KVLab-owned source code is available under the PolyForm Noncommercial License
 commercial agreement from the copyright holder. Third-party dependencies,
 datasets, models, papers, and artifacts retain their own applicable terms and
 attributions.
+
+### DeepSeek-V4.1 KV reuse/replay programme
+
+The 2026-09-24 review of DeepSeek-AI's *DeepSeek-V4.1-Flash: Pushing the Limits of KV Cache Compression* adds a new future-only KVLab programme covering cross-layer KV/index reuse, hierarchical candidate pools, bounded replay, persistent-versus-session cache separation, and an explicit FP4 comparator. See [DSV41 KV reuse/replay roadmap](docs/DEEPSEEK_V41_KV_REUSE_REPLAY_ROADMAP.md).
+
+This programme does not alter earlier frozen preregistrations or retroactively reinterpret existing BKV/K9/tiering results. FP4 and INT4 are separate evidence families, and DeepSeek's reported compression ratios are not KVLab results.

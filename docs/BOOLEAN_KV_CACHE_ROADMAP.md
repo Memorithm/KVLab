@@ -327,3 +327,9 @@ Every Boolean KV run must record:
 ## Scientific stop rule
 
 A Boolean KV candidate is promoted only when it passes its preregistered quality/correctness gate and improves at least one declared systems objective after all Boolean overhead is included. If it saves arithmetic but loses end-to-end latency or quality, record the result as negative and keep the numerical fallback.
+
+## DeepSeek-V4.1 interaction programme — DSV41-KV
+
+A separate future-only programme is defined in `DEEPSEEK_V41_KV_REUSE_REPLAY_ROADMAP.md`. It studies how Boolean KV selection composes with cross-layer reuse, hierarchical candidate pools, bounded replay and FP4/INT4 representation choices.
+
+BKV remains authoritative for Boolean-index semantics. DSV41-KV must not retune or reinterpret completed BKV experiments. Any combined experiment requires factorial controls separating Boolean selection benefit from layer reuse, precision reduction, and replay/recomputation.
