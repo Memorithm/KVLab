@@ -4,11 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
-import json
 from pathlib import Path
 
-from kvlab.slha_quality import evaluate_ranking, evaluate_selection
+from kvlab.slha_evidence import SlhaQualityEvidenceV1
 
 
 def main() -> int:
@@ -17,24 +15,24 @@ def main() -> int:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
+    import json
+
     payload = json.loads(args.input.read_text(encoding="utf-8"))
-    top_k = int(payload["top_k"])
-    reference = tuple(float(value) for value in payload["reference_scores"])
-    selected = tuple(int(value) for value in payload["selected_ids"])
-
-    out = {
-        "schema": "kvlab.slha-quality-panel/v1",
-        "selection": dataclasses.asdict(
-            evaluate_selection(reference, selected, top_k=top_k)
+    evidence = SlhaQualityEvidenceV1.capture(
+        experiment_id=str(payload["experiment_id"]),
+        query_id=str(payload["query_id"]),
+        candidate_id=str(payload["candidate_id"]),
+        top_k=int(payload["top_k"]),
+        reference_scores=tuple(float(value) for value in payload["reference_scores"]),
+        selected_ids=tuple(int(value) for value in payload["selected_ids"]),
+        candidate_scores=(
+            None
+            if "candidate_scores" not in payload
+            else tuple(float(value) for value in payload["candidate_scores"])
         ),
-    }
-    if "candidate_scores" in payload:
-        candidate = tuple(float(value) for value in payload["candidate_scores"])
-        out["ranking"] = dataclasses.asdict(
-            evaluate_ranking(reference, candidate, top_k=top_k)
-        )
+    )
 
-    encoded = json.dumps(out, sort_keys=True, separators=(",", ":")) + "\n"
+    encoded = evidence.canonical_json() + "\n"
     if args.output is None:
         print(encoded, end="")
     else:
