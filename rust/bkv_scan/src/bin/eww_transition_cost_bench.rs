@@ -168,12 +168,7 @@ fn time_transition(
     let min = *samples.iter().min().expect("non-empty repetitions");
     let max = *samples.iter().max().expect("non-empty repetitions");
     let median = median_ns(&mut samples);
-    Ok((
-        last.expect("non-empty repetitions"),
-        median,
-        min,
-        max,
-    ))
+    Ok((last.expect("non-empty repetitions"), median, min, max))
 }
 
 fn time_verification(
@@ -286,14 +281,10 @@ mod tests {
                     continue;
                 }
                 let target_width = ElasticWordWidthV1::from_bits(target_bits).unwrap();
-                let target = source
-                    .reference_repack_zero_extended(target_width)
-                    .unwrap();
+                let target = source.reference_repack_zero_extended(target_width).unwrap();
                 verify_roundtrip_payload(&source, &target).unwrap();
 
-                let rollback = target
-                    .reference_repack_zero_extended(source_width)
-                    .unwrap();
+                let rollback = target.reference_repack_zero_extended(source_width).unwrap();
                 assert_eq!(rollback, source);
             }
         }
