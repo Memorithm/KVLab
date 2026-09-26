@@ -251,8 +251,7 @@ mod tests {
             let word_count = signature_bits / 64;
             let query = (0..word_count)
                 .map(|index| {
-                    0x9e37_79b9_7f4a_7c15_u64
-                        .wrapping_mul((index as u64).wrapping_add(1))
+                    0x9e37_79b9_7f4a_7c15_u64.wrapping_mul((index as u64).wrapping_add(1))
                         ^ 0xa5a5_5a5a_0123_4567
                 })
                 .collect::<Vec<_>>();
@@ -276,8 +275,7 @@ mod tests {
 
             for workers in [1_usize, 2, 4, 8] {
                 let parallel =
-                    scan_packed_pages_parallel(signature_bits, &query, &pages, 1, workers)
-                        .unwrap();
+                    scan_packed_pages_parallel(signature_bits, &query, &pages, 1, workers).unwrap();
                 assert_eq!(
                     parallel, scalar,
                     "width {signature_bits}, worker count {workers}"
