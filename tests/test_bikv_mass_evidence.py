@@ -68,6 +68,19 @@ class BikvMassEvidenceTests(unittest.TestCase):
                 top_k=1,
             )
 
+    def test_boolean_and_text_scores_are_rejected_before_normalization(self) -> None:
+        for invalid in (True, "1.0"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(BikvMassEvidenceError, "numeric"):
+                    BikvMassEvidenceV1.capture(
+                        experiment_id="skv3-test",
+                        query_id="q0",
+                        score_semantics="test",
+                        handoff=self.handoff(),
+                        reference_page_scores=(invalid, 1.0, 0.0, -1.0),
+                        top_k=1,
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()
