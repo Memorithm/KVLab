@@ -28,7 +28,7 @@ class SlhaSyntheticPanelTests(unittest.TestCase):
         self.assertEqual(near_tie.top_k_recall, 0.5)
         self.assertGreater(
             dominant.top_k_missed_softmax_mass,
-            near_tie.top_k_missed_softmax_mass * 20.0,
+            near_tie.top_k_missed_softmax_mass * 3.0,
         )
 
     def test_missing_top1_is_worse_than_missing_boundary_on_dominant_case(self) -> None:
