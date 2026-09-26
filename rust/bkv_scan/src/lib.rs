@@ -20,6 +20,8 @@ pub enum ScanError {
     ZeroSignatureBits,
     EmptyPages,
     InvalidWordCount { expected: usize, actual: usize },
+    FlatStorageLengthMismatch { expected: usize, actual: usize },
+    StorageLengthOverflow,
     NonZeroTailBits,
     DistanceOutOfRange,
     ZeroWorkers,
@@ -113,6 +115,69 @@ pub fn scan_packed_pages(
         pages_scanned: pages.len(),
         signature_bits,
         bits_compared: pages.len() * signature_bits,
+    })
+}
+
+/// Scan exact packed signatures stored as one contiguous `u64` plane.
+///
+/// The signature width is carried once for the complete plane. Pages are laid
+/// out consecutively with no per-page `Vec`, enum or width tag:
+///
+/// ```text
+/// [page0 lanes...][page1 lanes...][page2 lanes...]...
+/// ```
+///
+/// This is a representation/validation path only; it makes no locality,
+/// allocation, cache-hit, latency or throughput claim.
+pub fn scan_packed_pages_flat(
+    signature_bits: usize,
+    query: &[u64],
+    page_count: usize,
+    flat_pages: &[u64],
+    max_distance: usize,
+) -> Result<ScanResult, ScanError> {
+    validate_words(signature_bits, query)?;
+    if page_count == 0 {
+        return Err(ScanError::EmptyPages);
+    }
+    if max_distance > signature_bits {
+        return Err(ScanError::DistanceOutOfRange);
+    }
+
+    let words_per_page = word_count(signature_bits)?;
+    let expected_lanes = page_count
+        .checked_mul(words_per_page)
+        .ok_or(ScanError::StorageLengthOverflow)?;
+    if flat_pages.len() != expected_lanes {
+        return Err(ScanError::FlatStorageLengthMismatch {
+            expected: expected_lanes,
+            actual: flat_pages.len(),
+        });
+    }
+
+    let tail_bits = signature_bits % 64;
+    let tail_mask = (tail_bits != 0).then(|| (1_u64 << tail_bits) - 1);
+    let mut selected_pages = Vec::new();
+
+    for (page_id, page) in flat_pages.chunks_exact(words_per_page).enumerate() {
+        if let Some(valid_mask) = tail_mask {
+            if page[words_per_page - 1] & !valid_mask != 0 {
+                return Err(ScanError::NonZeroTailBits);
+            }
+        }
+
+        if hamming_distance_validated(query, page) as usize <= max_distance {
+            selected_pages.push(page_id);
+        }
+    }
+
+    Ok(ScanResult {
+        selected_pages,
+        pages_scanned: page_count,
+        signature_bits,
+        bits_compared: page_count
+            .checked_mul(signature_bits)
+            .ok_or(ScanError::StorageLengthOverflow)?,
     })
 }
 
@@ -242,6 +307,75 @@ mod tests {
         assert_eq!(
             scan_packed_pages(4, &query, &pages, 1),
             Err(ScanError::NonZeroTailBits)
+        );
+    }
+
+    #[test]
+    fn flat_plane_matches_nested_oracle_across_frozen_elastic_widths() {
+        for signature_bits in [64_usize, 128, 256, 512, 1024, 2048] {
+            let words_per_page = signature_bits / 64;
+            let query = (0..words_per_page)
+                .map(|index| {
+                    0xd6e8_feb8_6659_fd93_u64.wrapping_mul((index as u64).wrapping_add(1))
+                        ^ 0x94d0_49bb_1331_11eb
+                })
+                .collect::<Vec<_>>();
+
+            let mut near = query.clone();
+            near[0] ^= 1;
+            let nested = vec![
+                query.clone(),
+                near,
+                vec![0_u64; words_per_page],
+                vec![u64::MAX; words_per_page],
+            ];
+            let flat = nested
+                .iter()
+                .flat_map(|page| page.iter().copied())
+                .collect::<Vec<_>>();
+
+            let oracle = scan_packed_pages(signature_bits, &query, &nested, 1).unwrap();
+            let contiguous =
+                scan_packed_pages_flat(signature_bits, &query, nested.len(), &flat, 1).unwrap();
+
+            assert_eq!(contiguous, oracle, "width {signature_bits}");
+        }
+    }
+
+    #[test]
+    fn flat_plane_rejects_incomplete_or_extra_storage() {
+        let query = [0_u64, 0_u64];
+
+        assert_eq!(
+            scan_packed_pages_flat(128, &query, 2, &[0, 0, 0], 0),
+            Err(ScanError::FlatStorageLengthMismatch {
+                expected: 4,
+                actual: 3
+            })
+        );
+        assert_eq!(
+            scan_packed_pages_flat(128, &query, 1, &[0, 0, 0], 0),
+            Err(ScanError::FlatStorageLengthMismatch {
+                expected: 2,
+                actual: 3
+            })
+        );
+    }
+
+    #[test]
+    fn flat_plane_preserves_tail_validation() {
+        let query = [0_u64];
+        assert_eq!(
+            scan_packed_pages_flat(4, &query, 1, &[0b1_0000], 1),
+            Err(ScanError::NonZeroTailBits)
+        );
+    }
+
+    #[test]
+    fn flat_plane_rejects_zero_pages() {
+        assert_eq!(
+            scan_packed_pages_flat(64, &[0], 0, &[], 0),
+            Err(ScanError::EmptyPages)
         );
     }
 
