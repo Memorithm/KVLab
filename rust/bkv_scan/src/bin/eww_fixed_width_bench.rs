@@ -87,8 +87,7 @@ fn lane_value(seed: u64, page_id: usize, lane: usize) -> u64 {
     let page = u64::try_from(page_id).unwrap_or(u64::MAX);
     let lane = u64::try_from(lane).unwrap_or(u64::MAX);
     mix64(
-        seed ^ page.wrapping_mul(0xd6e8_feb8_6659_fd93)
-            ^ lane.wrapping_mul(0xa076_1d64_78bd_642f),
+        seed ^ page.wrapping_mul(0xd6e8_feb8_6659_fd93) ^ lane.wrapping_mul(0xa076_1d64_78bd_642f),
     )
 }
 
