@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,10 +44,15 @@ def _plain_str(name: str, value: object) -> str:
 def _float_tuple(name: str, value: object) -> tuple[float, ...]:
     if not isinstance(value, list) or not value:
         raise SlhaEvidenceError(f"{name} must be a non-empty JSON array")
-    try:
-        return tuple(float(item) for item in value)
-    except (TypeError, ValueError) as error:
-        raise SlhaEvidenceError(f"{name} must contain numeric values") from error
+    out: list[float] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            raise SlhaEvidenceError(f"{name} must contain numeric values")
+        number = float(item)
+        if not math.isfinite(number):
+            raise SlhaEvidenceError(f"{name} must contain finite values")
+        out.append(number)
+    return tuple(out)
 
 
 def _int_tuple(name: str, value: object) -> tuple[int, ...]:
@@ -87,22 +93,22 @@ class SlhaQualityEvidenceV1:
         _plain_str("query_id", query_id)
         _plain_str("candidate_id", candidate_id)
 
-        reference = tuple(float(value) for value in reference_scores)
         selected = tuple(selected_ids)
+        try:
+            selection = evaluate_selection(reference_scores, selected, top_k=top_k)
+            ranking = (
+                None
+                if candidate_scores is None
+                else evaluate_ranking(reference_scores, candidate_scores, top_k=top_k)
+            )
+        except SlhaQualityError as error:
+            raise SlhaEvidenceError(str(error)) from error
+        reference = tuple(float(value) for value in reference_scores)
         candidate = (
             None
             if candidate_scores is None
             else tuple(float(value) for value in candidate_scores)
         )
-        try:
-            selection = evaluate_selection(reference, selected, top_k=top_k)
-            ranking = (
-                None
-                if candidate is None
-                else evaluate_ranking(reference, candidate, top_k=top_k)
-            )
-        except SlhaQualityError as error:
-            raise SlhaEvidenceError(str(error)) from error
 
         return cls(
             schema=SLHA_QUALITY_EVIDENCE_SCHEMA_V1,

@@ -26,6 +26,26 @@ class SlhaEvidenceTests(unittest.TestCase):
         payload = evidence.canonical_json()
         self.assertEqual(SlhaQualityEvidenceV1.from_canonical_json(payload), evidence)
 
+    def test_boolean_and_text_scores_are_rejected_before_normalization(self) -> None:
+        for invalid in (True, "1.0"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(SlhaEvidenceError, "numeric"):
+                    SlhaQualityEvidenceV1.capture(
+                        experiment_id="skv0-test",
+                        query_id="q0",
+                        candidate_id="candidate-a",
+                        top_k=1,
+                        reference_scores=(invalid, 0.0),
+                        selected_ids=(0,),
+                    )
+
+        decoded = json.loads(self.evidence().canonical_json())
+        decoded["candidate_scores"][0] = True
+        with self.assertRaisesRegex(SlhaEvidenceError, "numeric"):
+            SlhaQualityEvidenceV1.from_canonical_json(
+                json.dumps(decoded, sort_keys=True, separators=(",", ":"))
+            )
+
     def test_tampered_derived_metric_is_rejected(self) -> None:
         decoded = json.loads(self.evidence().canonical_json())
         decoded["selection"]["top_k_recall"] = 1.0

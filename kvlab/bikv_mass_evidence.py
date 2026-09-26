@@ -59,19 +59,19 @@ class BikvMassEvidenceV1:
         if not isinstance(handoff, ProspectBkvHandoffV1):
             raise BikvMassEvidenceError("handoff must be ProspectBkvHandoffV1")
 
-        scores = tuple(float(value) for value in reference_page_scores)
-        if len(scores) != len(handoff.page_words):
+        if len(reference_page_scores) != len(handoff.page_words):
             raise BikvMassEvidenceError(
                 "reference_page_scores length must match the handoff page universe"
             )
         try:
             selection = evaluate_selection(
-                scores,
+                reference_page_scores,
                 handoff.admitted_pages,
                 top_k=top_k,
             )
         except SlhaQualityError as error:
             raise BikvMassEvidenceError(str(error)) from error
+        scores = tuple(float(value) for value in reference_page_scores)
 
         return cls(
             schema=BIKV_MASS_EVIDENCE_SCHEMA_V1,
