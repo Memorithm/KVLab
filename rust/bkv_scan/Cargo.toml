@@ -8,5 +8,8 @@ publish = false
 [lib]
 path = "src/lib.rs"
 
+[dependencies]
+elastic-core = { git = "https://github.com/Memorithm/ElasticXxx.git", rev = "1206b431d6cc05f85e2d16d17d0239d1200650c5", package = "memorithm-elastic-core" }
+
 [lints.rust]
 unsafe_code = "forbid"
