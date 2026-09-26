@@ -1,0 +1,33 @@
+{
+  "schema": "kvlab.slha-adaptive-kv-campaign/v1",
+  "status": "preregistered-development",
+  "created": "2026-09-26",
+  "purpose": "Find KV routing/representation policies that can improve SLHAv2 under quality, work and memory constraints.",
+  "top_k_values": [1, 4, 8, 16, 32, 64],
+  "elastic_width_bits": [64, 128, 256, 512, 1024, 2048],
+  "candidate_families": [
+    "random-matched-density",
+    "tail-positional-matched-density",
+    "sign-hamming",
+    "sign-hamming-plus-norm",
+    "age-position-frequency",
+    "slha-residual-energy",
+    "boolean-composed",
+    "adaptive-repair"
+  ],
+  "mandatory_mechanistic_metrics": [
+    "top_k_recall",
+    "boundary_pair_accuracy",
+    "retained_softmax_mass",
+    "omitted_softmax_mass",
+    "top_k_missed_softmax_mass",
+    "candidate_density"
+  ],
+  "claim_boundaries": {
+    "exact_reference_scores": "evaluation-only unless a deployable candidate independently computes the same signal",
+    "logical_bytes_avoided": "not physical traffic",
+    "candidate_density": "not speedup",
+    "packed_width": "not hardware vector width",
+    "mechanistic_metrics": "not model quality"
+  }
+}
