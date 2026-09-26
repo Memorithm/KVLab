@@ -26,8 +26,32 @@ kvlab/    library
 tests/    executable checks
 ```
 
+## Active SLHAv2 feedback campaign
+
+KVLab is now the primary upstream research bench for the next SLHAv2
+generation. The campaign is deliberately broader than codec tuning: it studies
+**ranking/top-k preservation, retained softmax mass, Boolean-KV admission,
+elastic 64→2048-bit control/index widths, representation tiering, replay,
+layer/head sensitivity and adaptive repair**.
+
+The first common evaluator is executable in
+[`kvlab/slha_quality.py`](kvlab/slha_quality.py), with a machine-readable
+runner in [`scripts/run_slha_quality_panel.py`](scripts/run_slha_quality_panel.py).
+It keeps top-k recall, ranking-boundary accuracy and retained softmax mass
+separate; none is treated as a substitute for real-model quality.
+
+Programme:
+[`docs/SLHA_ADAPTIVE_KV_RESEARCH_PROGRAMME.md`](docs/SLHA_ADAPTIVE_KV_RESEARCH_PROGRAMME.md)
+
+Execution roadmap: [`ROADMAP.md`](ROADMAP.md).
+
+A KVLab result has **no automatic runtime authority in SLHAv2**. It must be
+source-bound, compared against matched controls, exported as evidence and
+requalified by SLHAv2 before promotion.
+
 ## Priority research programmes
 
+- [SLHAv2 adaptive-KV campaign — ranking/mass/Boolean/elastic feedback programme](docs/SLHA_ADAPTIVE_KV_RESEARCH_PROGRAMME.md)
 - [Boolean KV Cache — first-class memory-tier roadmap](docs/BOOLEAN_KV_CACHE_ROADMAP.md)
 - [Elastic word-width sweep — 64/128/256/512/1024/2048-bit preregistration](docs/ELASTIC_WORD_WIDTH_PREREGISTRATION.md)
 - [K9 cross-model KV transfer — preregistered reproduction track](docs/K9_CROSS_MODEL_TRANSFER_PREREGISTRATION.md)
