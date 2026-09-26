@@ -83,6 +83,8 @@ but places them below dangerous negatives.
 
 ## Literature-driven comparison requirements
 
+Detailed baseline matrix: [`KV_SOTA_2025_2026.md`](KV_SOTA_2025_2026.md).
+
 The 2025 state of the art motivates explicit comparison classes:
 
 - low-rank KV projection;
