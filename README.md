@@ -29,6 +29,7 @@ tests/    executable checks
 ## Priority research programmes
 
 - [Boolean KV Cache — first-class memory-tier roadmap](docs/BOOLEAN_KV_CACHE_ROADMAP.md)
+- [Elastic word-width sweep — 64/128/256/512/1024/2048-bit preregistration](docs/ELASTIC_WORD_WIDTH_PREREGISTRATION.md)
 - [K9 cross-model KV transfer — preregistered reproduction track](docs/K9_CROSS_MODEL_TRANSFER_PREREGISTRATION.md)
 - [KV Tiering + Replay Study — Preregistration](docs/KV-TIERING-REPLAY-PREREGISTRATION.md)
 - [Conjecture Research Programme](docs/CONJECTURE-RESEARCH-PROGRAMME.md)
