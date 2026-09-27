@@ -165,7 +165,9 @@ fn verify_payload(
             return Err(format!("lane-0 payload drift at word {index}"));
         }
         if target.iter().skip(1).any(|value| *value != 0) {
-            return Err(format!("reserved target lane became non-zero at word {index}"));
+            return Err(format!(
+                "reserved target lane became non-zero at word {index}"
+            ));
         }
     }
     Ok(())
