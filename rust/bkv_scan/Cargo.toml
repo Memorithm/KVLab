@@ -9,6 +9,7 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
+flat-attention = { git = "https://github.com/Memorithm/FLAT-ATTENTION.git", rev = "ae61403a4b4b4ed93ea8fa1bb4cd632be9038571" }
 elastic-core = { git = "https://github.com/Memorithm/ElasticXxx.git", rev = "1206b431d6cc05f85e2d16d17d0239d1200650c5", package = "memorithm-elastic-core" }
 
 [lints.rust]
