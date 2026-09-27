@@ -6,7 +6,8 @@ Elastic Word Width campaign harnesses in order:
 1. EWW-K1 — six fixed-width baselines;
 2. EWW-K2 — structural width-transition cost;
 3. EWW-K3 — adaptive width policy versus static baselines;
-4. EWW-K4 — FLAT production W64 page-map host qualification.
+4. EWW-K4 — FLAT production W64 page-map host qualification;
+5. EWW-K4 scale sweep — page-count/page-size scaling of the same production W64 map.
 
 The runner records its Git commit, Rust compiler, Cargo version and host identity
 before executing the campaign.
@@ -32,3 +33,8 @@ model and measurement protocols.
 
 The exact output remains retained in the GitHub Actions log for the workflow
 run. A failed harness fails the workflow rather than silently omitting an arm.
+
+
+The scale sweep is retained in the same evidence bundle as
+`eww-k4-flat-scale-sweep.csv`. Its timings remain runner-local structural
+evidence and do not establish hardware-independent scaling or GPU behavior.
