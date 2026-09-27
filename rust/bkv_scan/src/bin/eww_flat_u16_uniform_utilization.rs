@@ -97,7 +97,10 @@ mod tests {
     fn fixed_envelope_is_140_u32_or_560_bytes() {
         assert_eq!(WGSL_PAGED_U16_PACKED_WORDS, 128);
         assert_eq!(WGSL_PAGED_U16_UNIFORM_U32, 140);
-        assert_eq!(WGSL_PAGED_U16_UNIFORM_U32 * core::mem::size_of::<u32>(), 560);
+        assert_eq!(
+            WGSL_PAGED_U16_UNIFORM_U32 * core::mem::size_of::<u32>(),
+            560
+        );
     }
 
     #[test]
