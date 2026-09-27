@@ -1,0 +1,24 @@
+schema_version: 1
+kind: kvlab_ecosystem_roadmap
+status: active
+last_updated: "2026-09-27"
+repository: Memorithm/KVLab
+merge_policy: never_merge_this_file_to_default_branch_unless_user_explicitly_requests
+mission:
+  role: KV_state_research_task_consumer
+  boundary: KVLab_owns_preregistered_KV_evidence_not_FLAT_or_codec_runtime_implementations
+ax_task_program:
+  external_reference: google_ax_architecture_only
+  objective: >-
+    Execute KV campaigns in exact, isolated workspaces with matched memory,
+    device, compute and wall-clock envelopes and immutable evidence identity.
+  phases:
+    - AXKV1_pin_protocol_model_trace_code_and_input_identity
+    - AXKV2_attach_matched_KV_memory_compute_and_time_budgets
+    - AXKV3_isolate_parallel_causal_and_representation_campaigns
+    - AXKV4_bind_FLAT_TurboQuant_ADA_inputs_by_exact_revision
+    - AXKV5_export_task_provenance_without_mutating_preregistration
+  invariants:
+    - observed_results_do_not_rewrite_preregistration
+    - task_success_is_not_a_KV_quality_or_causal_claim
+    - cross_repo_inputs_are_exactly_versioned
