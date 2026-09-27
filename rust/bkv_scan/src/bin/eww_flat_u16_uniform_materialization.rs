@@ -45,9 +45,7 @@ fn median(samples: &mut [u128]) -> u128 {
     }
 }
 
-fn time_uniform(
-    packed: &WgpuPackedPagedKvTable16,
-) -> Result<(u128, u128, u128, Vec<u32>), String> {
+fn time_uniform(packed: &WgpuPackedPagedKvTable16) -> Result<(u128, u128, u128, Vec<u32>), String> {
     for _ in 0..WARMUP {
         black_box(
             packed
@@ -109,10 +107,7 @@ fn run() -> Result<(), String> {
         if &words[12..12 + used_page_words] != packed.packed_entries() {
             return Err("shadow uniform packed page-map drift".to_owned());
         }
-        if words[12 + used_page_words..]
-            .iter()
-            .any(|word| *word != 0)
-        {
+        if words[12 + used_page_words..].iter().any(|word| *word != 0) {
             return Err("shadow uniform padding is non-zero".to_owned());
         }
 
