@@ -15,7 +15,7 @@ cargo_version="$(cargo --version)"
 uname_value="$(uname -a)"
 
 {
-  printf 'schema=kvlab.eww-campaign-smoke/v2\n'
+  printf 'schema=kvlab.eww-campaign-smoke/v3\n'
   printf 'git_head=%s\n' "$git_head"
   printf 'rustc_version=%s\n' "$rustc_version"
   printf 'cargo_version=%s\n' "$cargo_version"
@@ -52,12 +52,16 @@ run_case "EWW-K4 FLAT production W64" "eww-k4-flat-production-w64.csv" \
   --bin eww_flat_production_w64_bench -- \
   16 4096 32768 1 3
 
+run_case "EWW-K4 FLAT production W64 scale sweep" "eww-k4-flat-scale-sweep.csv" \
+  --bin eww_flat_scale_sweep
+
 printf '%s\n' \
   "manifest.txt" \
   "eww-k1-fixed-width.csv" \
   "eww-k2-transition-cost.csv" \
   "eww-k3-adaptive-policy.csv" \
   "eww-k4-flat-production-w64.csv" \
+  "eww-k4-flat-scale-sweep.csv" \
   > "$evidence_dir/files.txt"
 
 while IFS= read -r relative; do
