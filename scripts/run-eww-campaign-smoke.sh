@@ -15,7 +15,7 @@ cargo_version="$(cargo --version)"
 uname_value="$(uname -a)"
 
 {
-  printf 'schema=kvlab.eww-campaign-smoke/v3\n'
+  printf 'schema=kvlab.eww-campaign-smoke/v4\n'
   printf 'git_head=%s\n' "$git_head"
   printf 'rustc_version=%s\n' "$rustc_version"
   printf 'cargo_version=%s\n' "$cargo_version"
@@ -54,6 +54,18 @@ run_case "EWW-K4 FLAT production W64" "eww-k4-flat-production-w64.csv" \
 
 run_case "EWW-K4 FLAT production W64 scale sweep" "eww-k4-flat-scale-sweep.csv" \
   --bin eww_flat_scale_sweep
+
+run_case "EWW-K4b FLAT W64-to-W32 projection" "eww-k4b-flat-w32-projection.csv" \
+  --bin eww_flat_w32_projection_bench
+
+run_case "EWW-K4c FLAT packed-u16 shadow" "eww-k4c-flat-u16-shadow.csv" \
+  --bin eww_flat_u16_shadow_bench
+
+run_case "EWW-K4d FLAT packed-u16 eligibility" "eww-k4d-flat-u16-eligibility.csv" \
+  --bin eww_flat_u16_eligibility
+
+run_case "EWW-K4e FLAT packed-u16 uniform utilization" "eww-k4e-flat-u16-uniform-utilization.csv" \
+  --bin eww_flat_u16_uniform_utilization
 
 printf '%s\n' \
   "manifest.txt" \
