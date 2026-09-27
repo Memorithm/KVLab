@@ -54,3 +54,12 @@ python -m unittest discover -s tests -p 'test_*.py'
 Run any repository-specific gates present on the exact branch before PR
 promotion. Never report a campaign as executed merely because its protocol or
 runner exists.
+
+
+## AX-inspired isolated task execution
+
+Before work involving autonomous experiment execution, cross-repository KV inputs, task-scoped capabilities, exact workspace materialization, resource envelopes, isolation, checkpoint/resume, or RemoteOps workers, also read:
+
+`origin/agent/ecosystem-roadmap:.agent/KVLAB_ECOSYSTEM_ROADMAP.yaml`
+
+Google AX is an architectural reference only. KVLab retains preregistration and evidence authority; SciRust Hub owns task lifecycle/identity, RemoteOps owns concrete host enforcement and ElasticXxx owns adaptive resource policy. Task completion never promotes a KV claim.
