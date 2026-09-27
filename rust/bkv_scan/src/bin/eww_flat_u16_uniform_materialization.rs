@@ -90,8 +90,8 @@ fn run() -> Result<(), String> {
                 WGSL_PAGED_U16_UNIFORM_U32
             ));
         }
-        if &words[..4]
-            != &[
+        if words[..4]
+            != [
                 u32::try_from(table.len()).map_err(|_| "live tokens do not fit u32")?,
                 u32::try_from(PAGE_SIZE).map_err(|_| "page size does not fit u32")?,
                 u32::try_from(mapped_pages).map_err(|_| "physical pages do not fit u32")?,
