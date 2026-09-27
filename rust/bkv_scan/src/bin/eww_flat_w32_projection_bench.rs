@@ -6,7 +6,7 @@
 //! does not create a GPU device or execute WGSL.
 
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
-use flat_attention::{WGSL_PAGED_MAX_LOGICAL_PAGES, WgpuPagedKvTable};
+use flat_attention::{WgpuPagedKvTable, WGSL_PAGED_MAX_LOGICAL_PAGES};
 use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -120,10 +120,7 @@ mod tests {
         assert!(PAGE_COUNTS
             .iter()
             .all(|mapped_pages| *mapped_pages <= WGSL_PAGED_MAX_LOGICAL_PAGES));
-        assert_eq!(
-            *PAGE_COUNTS.last().unwrap(),
-            WGSL_PAGED_MAX_LOGICAL_PAGES
-        );
+        assert_eq!(*PAGE_COUNTS.last().unwrap(), WGSL_PAGED_MAX_LOGICAL_PAGES);
     }
 
     #[test]
