@@ -119,9 +119,7 @@ fn classify(case: Case) -> Result<Expected, String> {
 }
 
 fn run() -> Result<(), String> {
-    println!(
-        "schema,case,physical_pages,mapped_pages,expected,observed,eligible"
-    );
+    println!("schema,case,physical_pages,mapped_pages,expected,observed,eligible");
     for case in CASES {
         let observed = classify(case)?;
         if observed != case.expected {
