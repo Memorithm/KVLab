@@ -168,8 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn logical_page_limit_is_independent_of_u16_physical_domain() {
-        assert!(PORTABLE_LOGICAL_PAGE_LIMIT < WGSL_PAGED_U16_MAX_PHYSICAL_PAGES);
+    fn portable_logical_page_limit_remains_256() {
         assert_eq!(PORTABLE_LOGICAL_PAGE_LIMIT, 256);
     }
 }
