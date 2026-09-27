@@ -6,7 +6,9 @@
 //! does not create a GPU device or execute WGSL.
 
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
-use flat_attention::{WgpuPagedKvTable, WGSL_PAGED_MAX_LOGICAL_PAGES};
+use flat_attention::WgpuPagedKvTable;
+
+const WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED_PINNED: usize = 256;
 use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -119,8 +121,8 @@ mod tests {
     fn frozen_page_counts_fit_portable_uniform_limit() {
         assert!(PAGE_COUNTS
             .iter()
-            .all(|mapped_pages| *mapped_pages <= WGSL_PAGED_MAX_LOGICAL_PAGES));
-        assert_eq!(*PAGE_COUNTS.last().unwrap(), WGSL_PAGED_MAX_LOGICAL_PAGES);
+            .all(|mapped_pages| *mapped_pages <= WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED));
+        assert_eq!(*PAGE_COUNTS.last().unwrap(), WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED);
     }
 
     #[test]
