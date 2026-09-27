@@ -122,7 +122,10 @@ mod tests {
         assert!(PAGE_COUNTS
             .iter()
             .all(|mapped_pages| *mapped_pages <= WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED));
-        assert_eq!(*PAGE_COUNTS.last().unwrap(), WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED);
+        assert_eq!(
+            *PAGE_COUNTS.last().unwrap(),
+            WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED
+        );
     }
 
     #[test]
