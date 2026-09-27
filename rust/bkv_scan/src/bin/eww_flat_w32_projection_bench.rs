@@ -8,7 +8,7 @@
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
 use flat_attention::WgpuPagedKvTable;
 
-const WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED_PINNED: usize = 256;
+const WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED: usize = 256;
 use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
