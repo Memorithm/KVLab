@@ -68,6 +68,15 @@ fn time_projection(table: &PagedKvTable) -> Result<(u128, u128, u128, WgpuPagedK
 }
 
 fn run() -> Result<(), String> {
+    if PAGE_COUNTS
+        .iter()
+        .any(|mapped_pages| *mapped_pages > WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED)
+    {
+        return Err(format!(
+            "frozen page-count sweep exceeds pinned portable limit {WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED}"
+        ));
+    }
+
     println!(
         "schema,flat_revision,page_size,mapped_pages,host_w64_page_map_bytes,device_w32_page_map_bytes,projection_median_ns,projection_min_ns,projection_max_ns,generation,uniform_encoded_bytes_status,gpu_status"
     );
