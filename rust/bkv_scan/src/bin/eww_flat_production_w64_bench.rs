@@ -71,7 +71,7 @@ fn build_table(config: Config) -> Result<PagedKvTable, String> {
 
 fn verify_production_w64(table: &PagedKvTable) -> Result<(), String> {
     let config = table.config();
-    let expected_pages = if table.len() == 0 {
+    let expected_pages = if table.is_empty() {
         0
     } else {
         table.len().div_ceil(config.page_size)
