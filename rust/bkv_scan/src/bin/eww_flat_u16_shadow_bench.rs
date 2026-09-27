@@ -8,7 +8,6 @@
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
 use flat_attention::{
     WgpuPackedPagedKvTable16, WgpuPagedKvTable, WGSL_PAGED_U16_MAX_PHYSICAL_PAGES,
-    WGSL_PAGED_U16_UNIFORM_U32,
 };
 use std::hint::black_box;
 use std::process::ExitCode;
@@ -158,6 +157,6 @@ mod tests {
 
     #[test]
     fn theoretical_fixed_uniform_is_560_bytes() {
-        assert_eq!(WGSL_PAGED_U16_UNIFORM_U32 * 4, 560);
+        assert_eq!(flat_attention::WGSL_PAGED_U16_UNIFORM_U32 * 4, 560);
     }
 }
