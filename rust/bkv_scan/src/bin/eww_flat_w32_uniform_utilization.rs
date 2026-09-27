@@ -120,7 +120,8 @@ mod tests {
     fn useful_page_map_utilization_is_monotonic_for_frozen_sweep() {
         let mut previous = 0_u64;
         for mapped_pages in PAGE_COUNTS {
-            let projected = WgpuPagedKvTable::from_table(&build_table(mapped_pages).unwrap()).unwrap();
+            let projected =
+                WgpuPagedKvTable::from_table(&build_table(mapped_pages).unwrap()).unwrap();
             let utilization = utilization_basis_points(
                 projected.page_map_payload_bytes(),
                 projected.encoded_uniform_bytes(),
