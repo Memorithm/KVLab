@@ -3,8 +3,10 @@
 //! EWW-K4f host materialization cost for FLAT's packed-u16 shadow uniform.
 //!
 //! This benchmark materializes the exact 140-u32 / 560-byte host shadow
-//! uniform provided by FLAT #322. It does not submit a GPU command or execute
-//! the production W32 shader.
+//! uniform provided by FLAT #322. The feature first landed at
+//! `5be5c0084db51e86c91a899bfeecf111ee3f52e7`; this binary links the exact
+//! dependency revision recorded separately below. It does not submit a GPU
+//! command or execute the production W32 shader.
 
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
 use flat_attention::{WgpuPackedPagedKvTable16, WGSL_PAGED_U16_UNIFORM_U32};
@@ -12,8 +14,9 @@ use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
 
-const SCHEMA: &str = "kvlab.eww-k4f-u16-uniform-materialization/v1";
-const FLAT_REVISION: &str = "5be5c0084db51e86c91a899bfeecf111ee3f52e7";
+const SCHEMA: &str = "kvlab.eww-k4f-u16-uniform-materialization/v2";
+const FLAT_FEATURE_REVISION: &str = "5be5c0084db51e86c91a899bfeecf111ee3f52e7";
+const FLAT_LINKED_REVISION: &str = "dff65361cb39b91e88a6d2bc99fc5469187809f4";
 const PAGE_COUNTS: [usize; 5] = [1, 4, 16, 64, 256];
 const PAGE_SIZE: usize = 16;
 const HEADER_TAIL: [u32; 8] = [64, 8, 2, 0x3f00_0000, 0x447a_0000, 16, 0, 0];
@@ -74,7 +77,7 @@ fn time_uniform(packed: &WgpuPackedPagedKvTable16) -> Result<(u128, u128, u128, 
 
 fn run() -> Result<(), String> {
     println!(
-        "schema,flat_revision,mapped_pages,packed_page_map_bytes,uniform_bytes,used_page_words,padded_page_words,materialize_median_ns,materialize_min_ns,materialize_max_ns,gpu_status,shader_status"
+        "schema,flat_feature_revision,flat_linked_revision,mapped_pages,packed_page_map_bytes,uniform_bytes,used_page_words,padded_page_words,materialize_median_ns,materialize_min_ns,materialize_max_ns,gpu_status,shader_status"
     );
 
     for mapped_pages in PAGE_COUNTS {
@@ -120,7 +123,7 @@ fn run() -> Result<(), String> {
             .ok_or_else(|| "uniform padding accounting underflow".to_owned())?;
 
         println!(
-            "{SCHEMA},{FLAT_REVISION},{mapped_pages},{},{uniform_bytes},{used_page_words},{padded_page_words},{median_ns},{min_ns},{max_ns},not-executed,shadow-only",
+            "{SCHEMA},{FLAT_FEATURE_REVISION},{FLAT_LINKED_REVISION},{mapped_pages},{},{uniform_bytes},{used_page_words},{padded_page_words},{median_ns},{min_ns},{max_ns},not-executed,shadow-only",
             packed.packed_page_map_bytes(),
         );
     }

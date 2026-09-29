@@ -49,8 +49,7 @@ fn shader_shadow_physical_page(words: &[u32], logical_page: usize) -> Result<u16
 
 fn verify_case(mapped_pages: usize) -> Result<(), String> {
     let table = build_table(mapped_pages)?;
-    let packed =
-        WgpuPackedPagedKvTable16::from_table(&table).map_err(|error| error.to_string())?;
+    let packed = WgpuPackedPagedKvTable16::from_table(&table).map_err(|error| error.to_string())?;
     let words = packed
         .shadow_uniform_words([0; 8])
         .map_err(|error| error.to_string())?;
