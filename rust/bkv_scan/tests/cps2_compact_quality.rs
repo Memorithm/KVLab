@@ -202,29 +202,50 @@ fn omitted_dominant_coordinate_is_retained_as_negative_control() {
 fn random_control_is_seed_bound_and_repeatable() {
     let shape = shape(19, 5);
     let (q, k, v) = synthetic_tensors(shape);
-    let first =
-        run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+    let first = run_cps2_panel(
+        &q,
+        &k,
+        &v,
+        shape,
+        config(false),
+        Cps2Protocol {
             compact_coordinates: &[0, 4],
             candidate_budget: 4,
             reference_top_k: 4,
             random_seed: 0x4350_5332,
-        }).unwrap();
-    let second =
-        run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+        },
+    )
+    .unwrap();
+    let second = run_cps2_panel(
+        &q,
+        &k,
+        &v,
+        shape,
+        config(false),
+        Cps2Protocol {
             compact_coordinates: &[0, 4],
             candidate_budget: 4,
             reference_top_k: 4,
             random_seed: 0x4350_5332,
-        }).unwrap();
+        },
+    )
+    .unwrap();
     assert_eq!(first, second);
 
-    let other =
-        run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+    let other = run_cps2_panel(
+        &q,
+        &k,
+        &v,
+        shape,
+        config(false),
+        Cps2Protocol {
             compact_coordinates: &[0, 4],
             candidate_budget: 4,
             reference_top_k: 4,
             random_seed: 0x4350_5333,
-        }).unwrap();
+        },
+    )
+    .unwrap();
     let first_random = first
         .observations
         .iter()
