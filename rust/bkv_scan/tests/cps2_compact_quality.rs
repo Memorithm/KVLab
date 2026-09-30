@@ -1,4 +1,4 @@
-use flat_attention::{AttentionShape, FlatAttentionConfig};
+use flat_attention_cps1::{AttentionShape, FlatAttentionConfig};
 use kvlab_bkv_scan::cps2_compact_quality::{
     run_cps2_panel, Cps2Arm, Cps2Error, CPS2_SCHEMA_VERSION, FLAT_CPS1_MERGE_REVISION,
 };
@@ -98,6 +98,7 @@ fn matched_controls_use_exact_compact_density_for_every_causal_row() {
     let shape = shape(19, 17);
     let (q, k, v) = synthetic_tensors(shape);
     let panel = run_cps2_panel(&q, &k, &v, shape, config(true), &[0, 3, 16], 4, 4, 11).unwrap();
+    assert_eq!(panel.observations.len(), shape.lse_len().unwrap() * 5);
 
     for row_index in 0..shape.seq_len {
         let compact = row(&panel, Cps2Arm::CompactProjected, row_index);
