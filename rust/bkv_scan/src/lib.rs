@@ -7,6 +7,8 @@
 //! candidates in page order. This crate makes no SIMD, NUMA, latency,
 //! throughput, scaling, or speedup claim.
 
+pub mod cps2_compact_quality;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanResult {
     pub selected_pages: Vec<usize>,
