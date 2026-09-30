@@ -8,10 +8,10 @@
 use core::fmt;
 
 use flat_algebraic_attention::compact_preselection::{compact_preselect, CompactPreselectionError};
-use flat_attention::api::research_structural_routing::{
+use flat_attention_cps1::api::research_structural_routing::{
     forward_reference_structural_sparse, StructuralCandidateSet, StructuralRoutingError,
 };
-use flat_attention::{forward_reference, AttentionShape, FlatAttentionConfig, FlatAttentionError};
+use flat_attention_cps1::{forward_reference, AttentionShape, FlatAttentionConfig, FlatAttentionError};
 
 pub const CPS2_SCHEMA_VERSION: &str = "kvlab.cps2-compact-quality/v1";
 pub const FLAT_CPS1_MERGE_REVISION: &str = "ad1634fc922f6223dd3a83ac84154a82b1a35562";
