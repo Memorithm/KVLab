@@ -1,6 +1,6 @@
 use flat_attention_cps1::{AttentionShape, FlatAttentionConfig};
 use kvlab_bkv_scan::cps2_compact_quality::{
-    run_cps2_panel, Cps2Arm, Cps2Protocol, Cps2RowObservation,
+    run_cps2_panel, Cps2Protocol, Cps2RowObservation,
 };
 
 fn ids(values: &[usize]) -> String {
