@@ -1,5 +1,7 @@
 use flat_attention_cps1::{AttentionShape, FlatAttentionConfig};
-use kvlab_bkv_scan::cps2_compact_quality::{run_cps2_panel, Cps2Arm, Cps2RowObservation};
+use kvlab_bkv_scan::cps2_compact_quality::{
+    run_cps2_panel, Cps2Arm, Cps2Protocol, Cps2RowObservation,
+};
 
 fn ids(values: &[usize]) -> String {
     values
@@ -55,7 +57,19 @@ fn run_case(adverse: bool) -> Result<(), Box<dyn std::error::Error>> {
         v.extend_from_slice(&[key as f32, 4.0 - key as f32]);
     }
 
-    let panel = run_cps2_panel(&q, &k, &v, shape, config, &[0], 2, 2, 0x4350_5332)?;
+    let panel = run_cps2_panel(
+        &q,
+        &k,
+        &v,
+        shape,
+        config,
+        Cps2Protocol {
+            compact_coordinates: &[0],
+            candidate_budget: 2,
+            reference_top_k: 2,
+            random_seed: 0x4350_5332,
+        },
+    )?;
     let case = if adverse {
         "omitted_dominant_coordinate"
     } else {
