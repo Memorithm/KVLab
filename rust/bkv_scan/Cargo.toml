@@ -9,7 +9,8 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-flat-attention = { git = "https://github.com/Memorithm/FLAT-ATTENTION.git", rev = "dff65361cb39b91e88a6d2bc99fc5469187809f4", features = ["wgpu"] }
+flat-attention = { git = "https://github.com/Memorithm/FLAT-ATTENTION.git", rev = "ad1634fc922f6223dd3a83ac84154a82b1a35562", features = ["wgpu"] }
+flat-algebraic-attention = { git = "https://github.com/Memorithm/FLAT-ATTENTION.git", rev = "ad1634fc922f6223dd3a83ac84154a82b1a35562", package = "flat-algebraic-attention" }
 elastic-core = { git = "https://github.com/Memorithm/ElasticXxx.git", rev = "1206b431d6cc05f85e2d16d17d0239d1200650c5", package = "memorithm-elastic-core" }
 
 [lints.rust]
