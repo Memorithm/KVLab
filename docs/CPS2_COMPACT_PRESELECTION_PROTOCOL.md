@@ -146,17 +146,23 @@ The Rust suite must cover:
 
 ## Execution
 
-Repository CI runs:
+The repository CI gate for this slice runs:
 
 ```bash
 cargo fmt --manifest-path rust/bkv_scan/Cargo.toml -- --check
 cargo clippy --manifest-path rust/bkv_scan/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path rust/bkv_scan/Cargo.toml
+```
+
+The Rust tests include deterministic repeated-panel equality under a frozen
+seed. The CSV runner is an explicit evidence command, not an implicit CI claim:
+
+```bash
 cargo run --manifest-path rust/bkv_scan/Cargo.toml --bin cps2_compact_panel
 ```
 
-The panel runner is executed twice and the byte output must match before its
-rows are retained as development evidence.
+If CSV output is retained as evidence, run the command twice on the same exact
+revision and require byte-identical output before archiving it.
 
 ## Promotion boundary
 
