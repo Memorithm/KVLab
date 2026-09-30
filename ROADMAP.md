@@ -59,6 +59,15 @@ matched-density and hybrid policies.
 
 Purpose: falsify weak metrics cheaply, not claim model quality.
 
+### CPS-2 — FLAT compact-preselection comparative quality bridge
+Status: active development protocol.
+
+Consume the exact FLAT CPS-1 producer at merge `ad1634fc922f6223dd3a83ac84154a82b1a35562` and compare its compact coordinate-projected candidate sets against all-accept, full-dimensional top-k, recent-tail and deterministic matched-random controls. The protocol is frozen in `docs/CPS2_COMPACT_PRESELECTION_PROTOCOL.md`.
+
+Development metrics are row-level top-k recall, retained/omitted softmax mass, O/LSE error, selected density, selector score components and numerical pairs executed. The first panel is synthetic and explicitly retains an omitted-dominant-coordinate negative control. It is not a speed, physical-traffic, real-model-quality or runtime-promotion result.
+
+Next gate: freeze real-model/model-tokenizer-dataset identities, coordinate/projection policy, budget, seeds, acceptance criteria and split identities before any protected population is observed.
+
 ### SKV-2 — real activation / real score capture
 
 On frozen model/layer/head/query populations, retain exact reference scores as
