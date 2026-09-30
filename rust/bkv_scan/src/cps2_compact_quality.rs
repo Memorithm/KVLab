@@ -67,7 +67,7 @@ pub struct Cps2RowObservation {
     pub row: usize,
     pub eligible_keys: usize,
     pub selected_keys: Vec<usize>,
-    pub protocol.reference_top_keys: Vec<usize>,
+    pub reference_top_keys: Vec<usize>,
     pub top_k_hits: usize,
     pub top_k_recall: f64,
     pub retained_softmax_mass: f64,
@@ -162,10 +162,10 @@ pub fn run_cps2_panel(
     config: FlatAttentionConfig,
     protocol: Cps2Protocol<'_>,
 ) -> Result<Cps2Panel, Cps2Error> {
-    if protocol.protocol.candidate_budget == 0 {
+    if protocol.candidate_budget == 0 {
         return Err(Cps2Error::ZeroBudget);
     }
-    if protocol.protocol.reference_top_k == 0 {
+    if protocol.reference_top_k == 0 {
         return Err(Cps2Error::ZeroReferenceTopK);
     }
 
@@ -224,7 +224,7 @@ pub fn run_cps2_panel(
             let eligible = eligible_key_count(shape, config, row);
             let scores = reference_scores(q, k, shape, row, eligible, scale)?;
             let selected = candidates.row(row)?.to_vec();
-            let reference_top = protocol.reference_top_keys(&scores, protocol.reference_top_k.min(eligible));
+            let reference_top = reference_top_keys(&scores, protocol.reference_top_k.min(eligible));
             let hits = reference_top
                 .iter()
                 .filter(|key| selected.binary_search(key).is_ok())
@@ -254,7 +254,7 @@ pub fn run_cps2_panel(
                 row,
                 eligible_keys: eligible,
                 selected_keys: selected,
-                protocol.reference_top_keys: reference_top,
+                reference_top_keys: reference_top,
                 top_k_hits: hits,
                 top_k_recall,
                 retained_softmax_mass: retained,
