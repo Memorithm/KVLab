@@ -1,5 +1,5 @@
 use kvlab_bkv_scan::cps2_compact_quality::{run_cps2_panel, Cps2Arm, Cps2RowObservation};
-use flat_attention::{AttentionShape, FlatAttentionConfig};
+use flat_attention_cps1::{AttentionShape, FlatAttentionConfig};
 
 fn ids(values: &[usize]) -> String {
     values
@@ -11,20 +11,24 @@ fn ids(values: &[usize]) -> String {
 
 fn emit(case: &str, observation: &Cps2RowObservation) {
     println!(
-        "{},{},{},{},{},{},{:.12},{:.12},{:.9},{:.9},{},{},{},{},{},{},{}",
+        "{},{},{},{},{},{},{},{},{},{:.12},{:.12},{:.12},{:.12},{},{},{:.9},{:.9},{},{},{},{}",
         observation.schema_version,
         observation.flat_source_revision,
         case,
         observation.arm.label(),
         observation.row,
+        observation.eligible_keys,
         ids(&observation.selected_keys),
+        ids(&observation.reference_top_keys),
+        observation.top_k_hits,
         observation.top_k_recall,
         observation.retained_softmax_mass,
-        observation.output_max_abs_error,
-        observation.lse_abs_error,
-        observation.eligible_keys,
+        observation.omitted_softmax_mass,
+        observation.selected_density,
         observation.selector_score_components,
         observation.numerical_pairs_executed,
+        observation.output_max_abs_error,
+        observation.lse_abs_error,
         observation.timing_measured,
         observation.physical_traffic_measured,
         observation.model_quality_measured,
@@ -57,18 +61,7 @@ fn run_case(adverse: bool) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         "aligned_coordinate"
     };
-    for arm in [
-        Cps2Arm::AllAccept,
-        Cps2Arm::CompactProjected,
-        Cps2Arm::FullScoreTopK,
-        Cps2Arm::RecentTail,
-        Cps2Arm::MatchedRandom,
-    ] {
-        let observation = panel
-            .observations
-            .iter()
-            .find(|observation| observation.arm == arm && observation.row == 4)
-            .expect("frozen row must exist");
+    for observation in &panel.observations {
         emit(case, observation);
     }
     Ok(())
@@ -76,7 +69,7 @@ fn run_case(adverse: bool) -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
-        "schema,flat_source_revision,case,arm,row,selected_ids,top_k_recall,retained_softmax_mass,output_max_abs_error,lse_abs_error,eligible_keys,selector_score_components,numerical_pairs_executed,timing_measured,physical_traffic_measured,model_quality_measured,promotion_authorized"
+        "schema,flat_source_revision,case,arm,row,eligible_keys,selected_ids,reference_top_ids,top_k_hits,top_k_recall,retained_softmax_mass,omitted_softmax_mass,selected_density,selector_score_components,numerical_pairs_executed,output_max_abs_error,lse_abs_error,timing_measured,physical_traffic_measured,model_quality_measured,promotion_authorized"
     );
     run_case(false)?;
     run_case(true)?;
