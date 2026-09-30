@@ -329,7 +329,7 @@ fn reference_scores(
     Ok(scores)
 }
 
-fn protocol.reference_top_keys(scores: &[f64], count: usize) -> Vec<usize> {
+fn reference_top_keys(scores: &[f64], count: usize) -> Vec<usize> {
     let mut ranked = (0..scores.len()).collect::<Vec<_>>();
     ranked.sort_by(|&left, &right| {
         scores[right]
@@ -394,6 +394,6 @@ mod tests {
 
     #[test]
     fn reference_ties_choose_smallest_original_key() {
-        assert_eq!(protocol.reference_top_keys(&[0.0, 0.0, 0.0, 0.0], 2), vec![0, 1]);
+        assert_eq!(reference_top_keys(&[0.0, 0.0, 0.0, 0.0], 2), vec![0, 1]);
     }
 }
