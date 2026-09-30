@@ -1,6 +1,7 @@
 use flat_attention_cps1::{AttentionShape, FlatAttentionConfig};
 use kvlab_bkv_scan::cps2_compact_quality::{
-    run_cps2_panel, Cps2Arm, Cps2Error, CPS2_SCHEMA_VERSION, FLAT_CPS1_MERGE_REVISION,
+    run_cps2_panel, Cps2Arm, Cps2Error, Cps2Protocol, CPS2_SCHEMA_VERSION,
+    FLAT_CPS1_MERGE_REVISION,
 };
 
 fn shape(seq_len: usize, head_dim: usize) -> AttentionShape {
@@ -71,10 +72,12 @@ fn all_accept_matches_dense_exactly_on_irregular_geometry() {
             &v,
             shape,
             config(causal),
-            &[0, 3, 16],
-            usize::MAX,
-            4,
-            7,
+            Cps2Protocol {
+                compact_coordinates: &[0, 3, 16],
+                candidate_budget: usize::MAX,
+                reference_top_k: 4,
+                random_seed: 7,
+            },
         )
         .unwrap();
         for row_index in 0..shape.lse_len().unwrap() {
@@ -97,7 +100,12 @@ fn all_accept_matches_dense_exactly_on_irregular_geometry() {
 fn matched_controls_use_exact_compact_density_for_every_causal_row() {
     let shape = shape(19, 17);
     let (q, k, v) = synthetic_tensors(shape);
-    let panel = run_cps2_panel(&q, &k, &v, shape, config(true), &[0, 3, 16], 4, 4, 11).unwrap();
+    let panel = run_cps2_panel(&q, &k, &v, shape, config(true), Cps2Protocol {
+        compact_coordinates: &[0, 3, 16],
+        candidate_budget: 4,
+        reference_top_k: 4,
+        random_seed: 11,
+    }).unwrap();
     assert_eq!(panel.observations.len(), shape.lse_len().unwrap() * 5);
 
     for row_index in 0..shape.seq_len {
@@ -123,7 +131,12 @@ fn matched_controls_use_exact_compact_density_for_every_causal_row() {
 fn full_score_topk_is_reference_ranking_upper_bound_when_budget_covers_k() {
     let shape = shape(19, 17);
     let (q, k, v) = synthetic_tensors(shape);
-    let panel = run_cps2_panel(&q, &k, &v, shape, config(false), &[0, 3, 16], 8, 4, 13).unwrap();
+    let panel = run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+        compact_coordinates: &[0, 3, 16],
+        candidate_budget: 8,
+        reference_top_k: 4,
+        random_seed: 13,
+    }).unwrap();
 
     for row_index in 0..shape.seq_len {
         let full = row(&panel, Cps2Arm::FullScoreTopK, row_index);
@@ -140,7 +153,12 @@ fn omitted_dominant_coordinate_is_retained_as_negative_control() {
     let q = vec![1.0; 6];
     let k = vec![0.0, 20.0, 1.0, 0.0, 2.0, 0.0];
     let v = vec![10.0, 10.0, 0.0, 0.0, 0.0, 0.0];
-    let panel = run_cps2_panel(&q, &k, &v, shape, config(false), &[0], 1, 1, 17).unwrap();
+    let panel = run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+        compact_coordinates: &[0],
+        candidate_budget: 1,
+        reference_top_k: 1,
+        random_seed: 17,
+    }).unwrap();
 
     let compact = row(&panel, Cps2Arm::CompactProjected, 2);
     let full = row(&panel, Cps2Arm::FullScoreTopK, 2);
@@ -162,13 +180,28 @@ fn random_control_is_seed_bound_and_repeatable() {
     let shape = shape(19, 5);
     let (q, k, v) = synthetic_tensors(shape);
     let first =
-        run_cps2_panel(&q, &k, &v, shape, config(false), &[0, 4], 4, 4, 0x4350_5332).unwrap();
+        run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+            compact_coordinates: &[0, 4],
+            candidate_budget: 4,
+            reference_top_k: 4,
+            random_seed: 0x4350_5332,
+        }).unwrap();
     let second =
-        run_cps2_panel(&q, &k, &v, shape, config(false), &[0, 4], 4, 4, 0x4350_5332).unwrap();
+        run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+            compact_coordinates: &[0, 4],
+            candidate_budget: 4,
+            reference_top_k: 4,
+            random_seed: 0x4350_5332,
+        }).unwrap();
     assert_eq!(first, second);
 
     let other =
-        run_cps2_panel(&q, &k, &v, shape, config(false), &[0, 4], 4, 4, 0x4350_5333).unwrap();
+        run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+            compact_coordinates: &[0, 4],
+            candidate_budget: 4,
+            reference_top_k: 4,
+            random_seed: 0x4350_5333,
+        }).unwrap();
     let first_random = first
         .observations
         .iter()
@@ -188,7 +221,12 @@ fn random_control_is_seed_bound_and_repeatable() {
 fn accounting_separates_compact_selector_from_full_score_control() {
     let shape = shape(19, 17);
     let (q, k, v) = synthetic_tensors(shape);
-    let panel = run_cps2_panel(&q, &k, &v, shape, config(false), &[0, 3, 16], 4, 4, 19).unwrap();
+    let panel = run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+        compact_coordinates: &[0, 3, 16],
+        candidate_budget: 4,
+        reference_top_k: 4,
+        random_seed: 19,
+    }).unwrap();
 
     assert_eq!(panel.compact_accounting.projection_dimension, 3);
     assert_eq!(panel.full_score_accounting.projection_dimension, 17);
@@ -220,12 +258,27 @@ fn invalid_protocol_parameters_fail_closed() {
     let (q, k, v) = synthetic_tensors(shape);
 
     assert_eq!(
-        run_cps2_panel(&q, &k, &v, shape, config(false), &[0], 0, 1, 1),
+        run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+            compact_coordinates: &[0],
+            candidate_budget: 0,
+            reference_top_k: 1,
+            random_seed: 1,
+        }),
         Err(Cps2Error::ZeroBudget)
     );
     assert_eq!(
-        run_cps2_panel(&q, &k, &v, shape, config(false), &[0], 1, 0, 1),
+        run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+            compact_coordinates: &[0],
+            candidate_budget: 1,
+            reference_top_k: 0,
+            random_seed: 1,
+        }),
         Err(Cps2Error::ZeroReferenceTopK)
     );
-    assert!(run_cps2_panel(&q, &k, &v, shape, config(false), &[], 1, 1, 1).is_err());
+    assert!(run_cps2_panel(&q, &k, &v, shape, config(false), Cps2Protocol {
+        compact_coordinates: &[],
+        candidate_budget: 1,
+        reference_top_k: 1,
+        random_seed: 1,
+    }).is_err());
 }
