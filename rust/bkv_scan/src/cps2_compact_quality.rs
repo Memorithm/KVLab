@@ -43,6 +43,14 @@ impl Cps2Arm {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cps2Protocol<'a> {
+    pub compact_coordinates: &'a [usize],
+    pub candidate_budget: usize,
+    pub reference_top_k: usize,
+    pub random_seed: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cps2SelectorAccounting {
     pub projection_dimension: usize,
     pub projected_key_payload_bytes: usize,
@@ -59,7 +67,7 @@ pub struct Cps2RowObservation {
     pub row: usize,
     pub eligible_keys: usize,
     pub selected_keys: Vec<usize>,
-    pub reference_top_keys: Vec<usize>,
+    pub protocol.reference_top_keys: Vec<usize>,
     pub top_k_hits: usize,
     pub top_k_recall: f64,
     pub retained_softmax_mass: f64,
@@ -152,24 +160,21 @@ pub fn run_cps2_panel(
     v: &[f32],
     shape: AttentionShape,
     config: FlatAttentionConfig,
-    compact_coordinates: &[usize],
-    candidate_budget: usize,
-    reference_top_k: usize,
-    random_seed: u64,
+    protocol: Cps2Protocol<'_>,
 ) -> Result<Cps2Panel, Cps2Error> {
-    if candidate_budget == 0 {
+    if protocol.protocol.candidate_budget == 0 {
         return Err(Cps2Error::ZeroBudget);
     }
-    if reference_top_k == 0 {
+    if protocol.protocol.reference_top_k == 0 {
         return Err(Cps2Error::ZeroReferenceTopK);
     }
 
     let dense = forward_reference(q, k, v, shape, config)?;
     validate_output(Cps2Arm::AllAccept, shape, &dense.output, &dense.lse)?;
 
-    let compact = compact_preselect(q, k, shape, config, compact_coordinates, candidate_budget)?;
+    let compact = compact_preselect(q, k, shape, config, protocol.compact_coordinates, protocol.candidate_budget)?;
     let full_coordinates = (0..shape.head_dim).collect::<Vec<_>>();
-    let full_score = compact_preselect(q, k, shape, config, &full_coordinates, candidate_budget)?;
+    let full_score = compact_preselect(q, k, shape, config, &full_coordinates, protocol.candidate_budget)?;
 
     let query_rows = shape.lse_len()?;
     let mut all_rows = Vec::with_capacity(query_rows);
@@ -184,7 +189,7 @@ pub fn run_cps2_panel(
         recent_rows.push((eligible - selected_count..eligible).collect::<Vec<_>>());
 
         let mut ranked = (0..eligible)
-            .map(|key| (random_rank(random_seed, row, key), key))
+            .map(|key| (random_rank(protocol.random_seed, row, key), key))
             .collect::<Vec<_>>();
         ranked.sort_unstable();
         let mut selected = ranked
@@ -219,7 +224,7 @@ pub fn run_cps2_panel(
             let eligible = eligible_key_count(shape, config, row);
             let scores = reference_scores(q, k, shape, row, eligible, scale)?;
             let selected = candidates.row(row)?.to_vec();
-            let reference_top = reference_top_keys(&scores, reference_top_k.min(eligible));
+            let reference_top = protocol.reference_top_keys(&scores, protocol.reference_top_k.min(eligible));
             let hits = reference_top
                 .iter()
                 .filter(|key| selected.binary_search(key).is_ok())
@@ -228,7 +233,7 @@ pub fn run_cps2_panel(
             let retained = retained_mass(&scores, &selected);
             let selected_density = selected.len() as f64 / eligible as f64;
             let selector_score_components = match arm {
-                Cps2Arm::CompactProjected => eligible * compact_coordinates.len(),
+                Cps2Arm::CompactProjected => eligible * protocol.compact_coordinates.len(),
                 Cps2Arm::FullScoreTopK => eligible * shape.head_dim,
                 Cps2Arm::AllAccept | Cps2Arm::RecentTail | Cps2Arm::MatchedRandom => 0,
             };
@@ -249,7 +254,7 @@ pub fn run_cps2_panel(
                 row,
                 eligible_keys: eligible,
                 selected_keys: selected,
-                reference_top_keys: reference_top,
+                protocol.reference_top_keys: reference_top,
                 top_k_hits: hits,
                 top_k_recall,
                 retained_softmax_mass: retained,
@@ -324,7 +329,7 @@ fn reference_scores(
     Ok(scores)
 }
 
-fn reference_top_keys(scores: &[f64], count: usize) -> Vec<usize> {
+fn protocol.reference_top_keys(scores: &[f64], count: usize) -> Vec<usize> {
     let mut ranked = (0..scores.len()).collect::<Vec<_>>();
     ranked.sort_by(|&left, &right| {
         scores[right]
@@ -353,10 +358,11 @@ fn validate_output(
     output: &[f32],
     lse: &[f32],
 ) -> Result<(), Cps2Error> {
-    for row in 0..shape.lse_len()? {
+    shape.lse_len()?;
+    for (row, lse_value) in lse.iter().copied().enumerate() {
         let begin = row * shape.head_dim;
         let end = begin + shape.head_dim;
-        if output[begin..end].iter().any(|value| !value.is_finite()) || !lse[row].is_finite() {
+        if output[begin..end].iter().any(|value| !value.is_finite()) || !lse_value.is_finite() {
             return Err(Cps2Error::NonFiniteAttentionOutput { arm, row });
         }
     }
@@ -388,6 +394,6 @@ mod tests {
 
     #[test]
     fn reference_ties_choose_smallest_original_key() {
-        assert_eq!(reference_top_keys(&[0.0, 0.0, 0.0, 0.0], 2), vec![0, 1]);
+        assert_eq!(protocol.reference_top_keys(&[0.0, 0.0, 0.0, 0.0], 2), vec![0, 1]);
     }
 }
