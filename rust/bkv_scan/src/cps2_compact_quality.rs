@@ -172,9 +172,23 @@ pub fn run_cps2_panel(
     let dense = forward_reference(q, k, v, shape, config)?;
     validate_output(Cps2Arm::AllAccept, shape, &dense.output, &dense.lse)?;
 
-    let compact = compact_preselect(q, k, shape, config, protocol.compact_coordinates, protocol.candidate_budget)?;
+    let compact = compact_preselect(
+        q,
+        k,
+        shape,
+        config,
+        protocol.compact_coordinates,
+        protocol.candidate_budget,
+    )?;
     let full_coordinates = (0..shape.head_dim).collect::<Vec<_>>();
-    let full_score = compact_preselect(q, k, shape, config, &full_coordinates, protocol.candidate_budget)?;
+    let full_score = compact_preselect(
+        q,
+        k,
+        shape,
+        config,
+        &full_coordinates,
+        protocol.candidate_budget,
+    )?;
 
     let query_rows = shape.lse_len()?;
     let mut all_rows = Vec::with_capacity(query_rows);
