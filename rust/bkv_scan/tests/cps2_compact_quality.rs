@@ -33,11 +33,11 @@ fn synthetic_tensors(shape: AttentionShape) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     (q, k, v)
 }
 
-fn row<'a>(
-    panel: &'a kvlab_bkv_scan::cps2_compact_quality::Cps2Panel,
+fn row(
+    panel: &kvlab_bkv_scan::cps2_compact_quality::Cps2Panel,
     arm: Cps2Arm,
     row: usize,
-) -> &'a kvlab_bkv_scan::cps2_compact_quality::Cps2RowObservation {
+) -> &kvlab_bkv_scan::cps2_compact_quality::Cps2RowObservation {
     panel
         .observations
         .iter()
