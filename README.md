@@ -43,6 +43,8 @@ separate; none is treated as a substitute for real-model quality.
 Programme:
 [`docs/SLHA_ADAPTIVE_KV_RESEARCH_PROGRAMME.md`](docs/SLHA_ADAPTIVE_KV_RESEARCH_PROGRAMME.md)
 
+The FLAT compact-preselection bridge is preregistered in [`docs/CPS2_COMPACT_PRESELECTION_PROTOCOL.md`](docs/CPS2_COMPACT_PRESELECTION_PROTOCOL.md). Its Rust evaluator lives in `rust/bkv_scan/src/cps2_compact_quality.rs`, is pinned to the exact qualified FLAT CPS-1 merge, and keeps logical selector work, numerical attention work, model quality and physical traffic as separate evidence dimensions.
+
 Execution roadmap: [`ROADMAP.md`](ROADMAP.md).
 
 A KVLab result has **no automatic runtime authority in SLHAv2**. It must be
