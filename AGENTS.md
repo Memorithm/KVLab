@@ -63,3 +63,7 @@ Before work involving autonomous experiment execution, cross-repository KV input
 `origin/agent/ecosystem-roadmap:.agent/KVLAB_ECOSYSTEM_ROADMAP.yaml`
 
 Google AX is an architectural reference only. KVLab retains preregistration and evidence authority; SciRust Hub owns task lifecycle/identity, RemoteOps owns concrete host enforcement and ElasticXxx owns adaptive resource policy. Task completion never promotes a KV claim.
+
+## Mandatory CPS-2 compact-preselection bridge
+
+Before compact-key screening, FLAT CPS-1 consumption, or comparative compact-selection quality work, read `docs/CPS2_COMPACT_PRESELECTION_PROTOCOL.md`. CPS-2 is a development/synthetic protocol pinned to FLAT merge `ad1634fc922f6223dd3a83ac84154a82b1a35562`. Keep full numerical K/V authoritative, preserve the omitted-dominant-coordinate falsification control, match random/recency density row by row, and never convert logical selector components or selected pairs into speed, bandwidth or physical-traffic claims. A later FLAT producer revision requires a new evidence identity and rerun.
