@@ -7,17 +7,14 @@
 
 use core::fmt;
 
-use flat_algebraic_attention::compact_preselection::{
-    compact_preselect, CompactPreselectionError,
-};
+use flat_algebraic_attention::compact_preselection::{compact_preselect, CompactPreselectionError};
 use flat_attention::api::research_structural_routing::{
     forward_reference_structural_sparse, StructuralCandidateSet, StructuralRoutingError,
 };
 use flat_attention::{forward_reference, AttentionShape, FlatAttentionConfig, FlatAttentionError};
 
 pub const CPS2_SCHEMA_VERSION: &str = "kvlab.cps2-compact-quality/v1";
-pub const FLAT_CPS1_MERGE_REVISION: &str =
-    "ad1634fc922f6223dd3a83ac84154a82b1a35562";
+pub const FLAT_CPS1_MERGE_REVISION: &str = "ad1634fc922f6223dd3a83ac84154a82b1a35562";
 pub const MATCHED_RANDOM_ALGORITHM: &str = "splitmix64-row-page-ranking-v1";
 pub const RECENCY_ALGORITHM: &str = "tail-window-v1";
 
@@ -168,23 +165,9 @@ pub fn run_cps2_panel(
     let dense = forward_reference(q, k, v, shape, config)?;
     validate_output(Cps2Arm::AllAccept, shape, &dense.output, &dense.lse)?;
 
-    let compact = compact_preselect(
-        q,
-        k,
-        shape,
-        config,
-        compact_coordinates,
-        candidate_budget,
-    )?;
+    let compact = compact_preselect(q, k, shape, config, compact_coordinates, candidate_budget)?;
     let full_coordinates = (0..shape.head_dim).collect::<Vec<_>>();
-    let full_score = compact_preselect(
-        q,
-        k,
-        shape,
-        config,
-        &full_coordinates,
-        candidate_budget,
-    )?;
+    let full_score = compact_preselect(q, k, shape, config, &full_coordinates, candidate_budget)?;
 
     let query_rows = shape.lse_len()?;
     let mut all_rows = Vec::with_capacity(query_rows);
@@ -227,16 +210,14 @@ pub fn run_cps2_panel(
     let mut observations = Vec::with_capacity(query_rows * arms.len());
 
     for (arm, candidates) in arms {
-        let sparse =
-            forward_reference_structural_sparse(q, k, v, shape, config, &candidates)?;
+        let sparse = forward_reference_structural_sparse(q, k, v, shape, config, &candidates)?;
         validate_output(arm, shape, &sparse.attention.output, &sparse.attention.lse)?;
 
         for row in 0..query_rows {
             let eligible = eligible_key_count(shape, config, row);
             let scores = reference_scores(q, k, shape, row, eligible, scale)?;
             let selected = candidates.row(row)?.to_vec();
-            let reference_top =
-                reference_top_keys(&scores, reference_top_k.min(eligible));
+            let reference_top = reference_top_keys(&scores, reference_top_k.min(eligible));
             let hits = reference_top
                 .iter()
                 .filter(|key| selected.binary_search(key).is_ok())
@@ -255,12 +236,9 @@ pub fn run_cps2_panel(
             let output_max_abs_error = dense.output[output_begin..output_end]
                 .iter()
                 .zip(&sparse.attention.output[output_begin..output_end])
-                .map(|(&reference, &candidate)| {
-                    f64::from((reference - candidate).abs())
-                })
+                .map(|(&reference, &candidate)| f64::from((reference - candidate).abs()))
                 .fold(0.0_f64, f64::max);
-            let lse_abs_error =
-                f64::from((dense.lse[row] - sparse.attention.lse[row]).abs());
+            let lse_abs_error = f64::from((dense.lse[row] - sparse.attention.lse[row]).abs());
 
             observations.push(Cps2RowObservation {
                 schema_version: CPS2_SCHEMA_VERSION,
@@ -308,11 +286,7 @@ pub fn run_cps2_panel(
     })
 }
 
-fn eligible_key_count(
-    shape: AttentionShape,
-    config: FlatAttentionConfig,
-    row: usize,
-) -> usize {
+fn eligible_key_count(shape: AttentionShape, config: FlatAttentionConfig, row: usize) -> usize {
     if config.causal {
         row % shape.seq_len + 1
     } else {
@@ -380,9 +354,7 @@ fn validate_output(
     for row in 0..shape.lse_len()? {
         let begin = row * shape.head_dim;
         let end = begin + shape.head_dim;
-        if output[begin..end].iter().any(|value| !value.is_finite())
-            || !lse[row].is_finite()
-        {
+        if output[begin..end].iter().any(|value| !value.is_finite()) || !lse[row].is_finite() {
             return Err(Cps2Error::NonFiniteAttentionOutput { arm, row });
         }
     }
