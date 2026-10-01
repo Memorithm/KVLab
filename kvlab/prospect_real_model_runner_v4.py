@@ -285,7 +285,7 @@ def _run_bounded_backend_process(
         for key in list(selector.get_map().values()):
             _close_selector_pipe(selector, key.fileobj)
         selector.close()
-        if process.poll() is None:
+        if lingering_pipes or process.poll() is None:
             _kill_backend_process_group(process)
 
     if timed_out:
