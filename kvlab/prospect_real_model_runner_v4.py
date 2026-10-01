@@ -239,6 +239,7 @@ def _run_bounded_backend_process(
                 _kill_backend_process_group(process)
                 process_exited_at = time.monotonic()
                 drain_deadline = process_exited_at + _POST_KILL_DRAIN_SECONDS
+                now = process_exited_at
 
             effective_deadline = drain_deadline if drain_deadline is not None else deadline
             if now >= effective_deadline:
@@ -341,6 +342,7 @@ def _kill_backend_process_group(process: subprocess.Popen[bytes]) -> None:
             process.kill()
         except OSError:
             pass
+
 
 def run_real_model_selection_campaign_v4(
     *,
