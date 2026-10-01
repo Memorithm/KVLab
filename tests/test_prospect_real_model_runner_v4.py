@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from kvlab.prospect_real_model_runner import (
     BackendMetricValue,
@@ -253,6 +254,51 @@ class ProspectKvRealModelRunnerV4Tests(unittest.TestCase):
                         os.kill(int(pid_path.read_text(encoding="utf-8")), 9)
                     except ProcessLookupError:
                         pass
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_large_backend_stdin_uses_zero_copy_memoryview_slices(self):
+        script = (
+            "import base64,hashlib,json,sys,time;"
+            "time.sleep(0.05);"
+            "request=json.load(sys.stdin);"
+            "payload=json.dumps(request,sort_keys=True,separators=(',',':'));"
+            "response={'schema':'kvlab.prospect-kv-backend-response/v4',"
+            "'request_sha256':hashlib.sha256(payload.encode()).hexdigest(),"
+            "'applied_mode':request['mode'],'applied_policy':request['policy'],"
+            "'applied_retained_positions':request['retained_positions'],"
+            "'output_artifact_base64':base64.b64encode(b'ok').decode(),"
+            "'metrics':[{'name':'token_accuracy','kind':'quality','unit':'ratio',"
+            "'preference':'higher_is_better','value':1.0}]};"
+            "sys.stdout.write(json.dumps(response,sort_keys=True,separators=(',',':')))"
+        )
+        backend = ExternalJsonBackendV4(
+            command=(sys.executable, "-c", script), timeout_seconds=5.0
+        )
+        original_write = os.write
+        large_write_types = []
+
+        def recording_write(file_descriptor, data):
+            if len(data) > 4096:
+                large_write_types.append(type(data))
+            return original_write(file_descriptor, data)
+
+        request = {
+            "mode": "baseline",
+            "policy": None,
+            "retained_positions": [],
+            "padding": "x" * (256 * 1024),
+        }
+        with mock.patch(
+            "kvlab.prospect_real_model_runner_v4.os.write",
+            side_effect=recording_write,
+        ):
+            observation = backend.execute(request)
+
+        self.assertEqual(observation.artifact_bytes, b"ok")
+        self.assertGreater(len(large_write_types), 1)
+        self.assertTrue(
+            all(payload_type is memoryview for payload_type in large_write_types)
+        )
 
     @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
     def test_external_backend_stdout_is_capped_while_drained(self):
