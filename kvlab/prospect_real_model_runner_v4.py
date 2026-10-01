@@ -19,8 +19,12 @@ import binascii
 import hashlib
 import json
 import math
+import os
+import signal
 import subprocess
-from typing import Any, Sequence
+import threading
+import time
+from typing import Any, BinaryIO, Sequence
 
 from .prospect_real_model_runner import (
     BackendMetricValue,
@@ -38,6 +42,11 @@ PROSPECT_KV_REAL_MODEL_POSITION_TRACE_SCHEMA_V1 = (
 )
 PROSPECT_KV_BACKEND_REQUEST_SCHEMA_V4 = "kvlab.prospect-kv-backend-request/v4"
 PROSPECT_KV_BACKEND_RESPONSE_SCHEMA_V4 = "kvlab.prospect-kv-backend-response/v4"
+
+_MAX_BACKEND_STDOUT_BYTES = 1024 * 1024
+_MAX_BACKEND_STDERR_BYTES = 64 * 1024
+_PIPE_READ_CHUNK_BYTES = 64 * 1024
+_POST_KILL_DRAIN_SECONDS = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,29 +148,201 @@ class ExternalJsonBackendV4:
     def execute(self, request: dict[str, Any]) -> BackendObservationV4:
         payload = _canonical_json(request)
         request_sha256 = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-        try:
-            completed = subprocess.run(
-                self.command,
-                input=payload,
-                capture_output=True,
-                text=True,
-                timeout=float(self.timeout_seconds),
-                check=False,
-                shell=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as error:
-            raise ProspectKvRealModelRunnerError("external backend execution failed") from error
-        if completed.returncode != 0:
+        returncode, stdout, _stderr = _run_bounded_backend_process(
+            self.command,
+            payload.encode("utf-8"),
+            timeout_seconds=float(self.timeout_seconds),
+        )
+        if returncode != 0:
             raise ProspectKvRealModelRunnerError(
-                f"external backend exited with status {completed.returncode}"
+                f"external backend exited with status {returncode}"
             )
+        try:
+            response_payload = stdout.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ProspectKvRealModelRunnerError(
+                "external backend stdout is not UTF-8"
+            ) from error
         return _parse_backend_response_v4(
-            completed.stdout,
+            response_payload,
             expected_request_sha256=request_sha256,
             expected_mode=request["mode"],
             expected_policy=request["policy"],
             expected_retained_positions=request["retained_positions"],
         )
+
+
+def _run_bounded_backend_process(
+    command: Sequence[str],
+    payload: bytes,
+    *,
+    timeout_seconds: float,
+) -> tuple[int, bytes, bytes]:
+    """Run one backend with a process-group deadline and bounded pipe drains."""
+
+    if os.name != "posix":
+        raise ProspectKvRealModelRunnerError(
+            "external backend supervision requires POSIX process groups"
+        )
+
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        process = subprocess.Popen(
+            tuple(command),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+            start_new_session=True,
+        )
+    except OSError as error:
+        raise ProspectKvRealModelRunnerError(
+            "external backend launch failed"
+        ) from error
+
+    assert process.stdin is not None
+    assert process.stdout is not None
+    assert process.stderr is not None
+
+    stdout_chunks: list[bytes] = []
+    stderr_chunks: list[bytes] = []
+    stdout_state = {"bytes": 0}
+    stderr_state = {"bytes": 0}
+    pipe_errors: list[BaseException] = []
+
+    stdout_thread = threading.Thread(
+        target=_drain_pipe_bounded,
+        args=(process.stdout, _MAX_BACKEND_STDOUT_BYTES, stdout_chunks, stdout_state, pipe_errors),
+        daemon=True,
+        name="kvlab-backend-stdout",
+    )
+    stderr_thread = threading.Thread(
+        target=_drain_pipe_bounded,
+        args=(process.stderr, _MAX_BACKEND_STDERR_BYTES, stderr_chunks, stderr_state, pipe_errors),
+        daemon=True,
+        name="kvlab-backend-stderr",
+    )
+    stdin_thread = threading.Thread(
+        target=_write_backend_stdin,
+        args=(process.stdin, payload, pipe_errors),
+        daemon=True,
+        name="kvlab-backend-stdin",
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+    stdin_thread.start()
+
+    timed_out = False
+    try:
+        process.wait(timeout=max(0.0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        _kill_backend_process_group(process)
+
+    drain_deadline = (
+        time.monotonic() + _POST_KILL_DRAIN_SECONDS if timed_out else deadline
+    )
+    for thread in (stdin_thread, stdout_thread, stderr_thread):
+        thread.join(timeout=max(0.0, drain_deadline - time.monotonic()))
+
+    lingering = [
+        thread.name
+        for thread in (stdin_thread, stdout_thread, stderr_thread)
+        if thread.is_alive()
+    ]
+    if lingering:
+        _kill_backend_process_group(process)
+        for pipe in (process.stdin, process.stdout, process.stderr):
+            try:
+                pipe.close()
+            except OSError:
+                pass
+        raise ProspectKvRealModelRunnerError(
+            "external backend pipe drain exceeded the wall-clock deadline"
+        )
+
+    if timed_out:
+        raise ProspectKvRealModelRunnerError(
+            "external backend exceeded the wall-clock deadline"
+        )
+    if pipe_errors:
+        raise ProspectKvRealModelRunnerError(
+            "external backend pipe supervision failed"
+        ) from pipe_errors[0]
+    if stdout_state["bytes"] > _MAX_BACKEND_STDOUT_BYTES:
+        raise ProspectKvRealModelRunnerError(
+            "external backend stdout exceeded the byte limit"
+        )
+    if stderr_state["bytes"] > _MAX_BACKEND_STDERR_BYTES:
+        raise ProspectKvRealModelRunnerError(
+            "external backend stderr exceeded the byte limit"
+        )
+
+    return process.returncode, b"".join(stdout_chunks), b"".join(stderr_chunks)
+
+
+def _drain_pipe_bounded(
+    pipe: BinaryIO,
+    limit: int,
+    chunks: list[bytes],
+    state: dict[str, int],
+    errors: list[BaseException],
+) -> None:
+    try:
+        while True:
+            chunk = pipe.read(_PIPE_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            previous = state["bytes"]
+            state["bytes"] = previous + len(chunk)
+            remaining = max(0, (limit + 1) - previous)
+            if remaining:
+                chunks.append(chunk[:remaining])
+    except BaseException as error:
+        errors.append(error)
+    finally:
+        try:
+            pipe.close()
+        except OSError:
+            pass
+
+
+def _write_backend_stdin(
+    pipe: BinaryIO,
+    payload: bytes,
+    errors: list[BaseException],
+) -> None:
+    try:
+        pipe.write(payload)
+        pipe.flush()
+    except BrokenPipeError:
+        pass
+    except BaseException as error:
+        errors.append(error)
+    finally:
+        try:
+            pipe.close()
+        except OSError:
+            pass
+
+
+def _kill_backend_process_group(process: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except OSError:
+        try:
+            process.kill()
+        except OSError:
+            pass
+    try:
+        process.wait(timeout=_POST_KILL_DRAIN_SECONDS)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except OSError:
+            pass
 
 
 def run_real_model_selection_campaign_v4(
