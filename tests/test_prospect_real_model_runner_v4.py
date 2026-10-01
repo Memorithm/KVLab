@@ -1,6 +1,11 @@
 import base64
 import hashlib
 import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import time
 import unittest
 
 from kvlab.prospect_real_model_runner import (
@@ -10,8 +15,10 @@ from kvlab.prospect_real_model_runner import (
 )
 from kvlab.prospect_real_model_runner_v4 import (
     BackendObservationV4,
+    ExternalJsonBackendV4,
     PositionModelEvaluationTraceV1,
     PROSPECT_KV_BACKEND_RESPONSE_SCHEMA_V4,
+    _MAX_BACKEND_STDOUT_BYTES,
     _backend_request_v4,
     _parse_backend_response_v4,
     run_real_model_selection_campaign_v4,
@@ -156,6 +163,82 @@ class ProspectKvRealModelRunnerV4Tests(unittest.TestCase):
                 expected_mode="candidate",
                 expected_policy="fixture",
                 expected_retained_positions=[0, 2, 4],
+            )
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_external_backend_starts_in_own_process_group(self):
+        script = (
+            "import base64,hashlib,json,os,sys;"
+            "request=json.load(sys.stdin);"
+            "payload=json.dumps(request,sort_keys=True,separators=(',',':'));"
+            "artifact=f'{os.getpid()}:{os.getpgrp()}'.encode();"
+            "response={'schema':'kvlab.prospect-kv-backend-response/v4',"
+            "'request_sha256':hashlib.sha256(payload.encode()).hexdigest(),"
+            "'applied_mode':request['mode'],'applied_policy':request['policy'],"
+            "'applied_retained_positions':request['retained_positions'],"
+            "'output_artifact_base64':base64.b64encode(artifact).decode(),"
+            "'metrics':[{'name':'token_accuracy','kind':'quality','unit':'ratio',"
+            "'preference':'higher_is_better','value':1.0}]};"
+            "sys.stdout.write(json.dumps(response,sort_keys=True,separators=(',',':')))"
+        )
+        backend = ExternalJsonBackendV4(
+            command=(sys.executable, "-c", script), timeout_seconds=5.0
+        )
+        observation = backend.execute(
+            {"mode": "baseline", "policy": None, "retained_positions": []}
+        )
+        process_id, process_group_id = observation.artifact_bytes.decode().split(":")
+        self.assertEqual(process_id, process_group_id)
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_external_backend_timeout_kills_descendant_group_and_returns_boundedly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pid_path = Path(directory) / "descendant.pid"
+            script = (
+                "import subprocess,sys,time;"
+                "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']);"
+                f"open({str(pid_path)!r},'w',encoding='utf-8').write(str(child.pid));"
+                "time.sleep(60)"
+            )
+            backend = ExternalJsonBackendV4(
+                command=(sys.executable, "-c", script), timeout_seconds=0.2
+            )
+            started = time.monotonic()
+            with self.assertRaisesRegex(
+                ProspectKvRealModelRunnerError, "wall-clock deadline"
+            ):
+                backend.execute(
+                    {"mode": "baseline", "policy": None, "retained_positions": []}
+                )
+            self.assertLess(time.monotonic() - started, 3.0)
+
+            descendant_pid = int(pid_path.read_text(encoding="utf-8"))
+            state_path = Path(f"/proc/{descendant_pid}/stat")
+            for _ in range(50):
+                if not state_path.exists():
+                    break
+                fields = state_path.read_text(encoding="utf-8").split()
+                if len(fields) >= 3 and fields[2] == "Z":
+                    break
+                time.sleep(0.02)
+            else:
+                self.fail("backend descendant survived process-group timeout")
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_external_backend_stdout_is_capped_while_drained(self):
+        script = (
+            "import sys;"
+            f"sys.stdout.buffer.write(b'x'*({_MAX_BACKEND_STDOUT_BYTES}+1));"
+            "sys.stdout.buffer.flush()"
+        )
+        backend = ExternalJsonBackendV4(
+            command=(sys.executable, "-c", script), timeout_seconds=5.0
+        )
+        with self.assertRaisesRegex(
+            ProspectKvRealModelRunnerError, "stdout exceeded the byte limit"
+        ):
+            backend.execute(
+                {"mode": "baseline", "policy": None, "retained_positions": []}
             )
 
     def test_campaign_fails_closed_when_trace_hash_drifts(self):
