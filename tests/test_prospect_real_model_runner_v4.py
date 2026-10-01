@@ -226,6 +226,45 @@ class ProspectKvRealModelRunnerV4Tests(unittest.TestCase):
                 self.fail("backend descendant survived process-group timeout")
 
     @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_exited_leader_kills_same_group_child_holding_pipe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pid_path = Path(directory) / "lingering.pid"
+            script = (
+                "import subprocess,sys;"
+                "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)']);"
+                f"open({str(pid_path)!r},'w',encoding='utf-8').write(str(child.pid))"
+            )
+            backend = ExternalJsonBackendV4(
+                command=(sys.executable, "-c", script), timeout_seconds=3.0
+            )
+            started = time.monotonic()
+            try:
+                with self.assertRaisesRegex(
+                    ProspectKvRealModelRunnerError, "pipe drain exceeded"
+                ):
+                    backend.execute(
+                        {"mode": "baseline", "policy": None, "retained_positions": []}
+                    )
+                self.assertLess(time.monotonic() - started, 3.0)
+                descendant_pid = int(pid_path.read_text(encoding="utf-8"))
+                state_path = Path(f"/proc/{descendant_pid}/stat")
+                for _ in range(50):
+                    if not state_path.exists():
+                        break
+                    fields = state_path.read_text(encoding="utf-8").split()
+                    if len(fields) >= 3 and fields[2] == "Z":
+                        break
+                    time.sleep(0.02)
+                else:
+                    self.fail("same-group child survived the bounded pipe drain")
+            finally:
+                if pid_path.exists():
+                    try:
+                        os.kill(int(pid_path.read_text(encoding="utf-8")), 9)
+                    except ProcessLookupError:
+                        pass
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
     def test_timeout_does_not_block_on_escaped_descendant_pipe(self):
         with tempfile.TemporaryDirectory() as directory:
             pid_path = Path(directory) / "escaped.pid"
