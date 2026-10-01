@@ -225,6 +225,36 @@ class ProspectKvRealModelRunnerV4Tests(unittest.TestCase):
                 self.fail("backend descendant survived process-group timeout")
 
     @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_timeout_does_not_block_on_escaped_descendant_pipe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pid_path = Path(directory) / "escaped.pid"
+            script = (
+                "import subprocess,sys,time;"
+                "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],"
+                "start_new_session=True);"
+                f"open({str(pid_path)!r},'w',encoding='utf-8').write(str(child.pid));"
+                "time.sleep(60)"
+            )
+            backend = ExternalJsonBackendV4(
+                command=(sys.executable, "-c", script), timeout_seconds=0.2
+            )
+            started = time.monotonic()
+            try:
+                with self.assertRaisesRegex(
+                    ProspectKvRealModelRunnerError, "wall-clock deadline"
+                ):
+                    backend.execute(
+                        {"mode": "baseline", "policy": None, "retained_positions": []}
+                    )
+                self.assertLess(time.monotonic() - started, 3.0)
+            finally:
+                if pid_path.exists():
+                    try:
+                        os.kill(int(pid_path.read_text(encoding="utf-8")), 9)
+                    except ProcessLookupError:
+                        pass
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
     def test_external_backend_stdout_is_capped_while_drained(self):
         script = (
             "import sys;"
