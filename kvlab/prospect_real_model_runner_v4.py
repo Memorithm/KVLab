@@ -20,11 +20,11 @@ import hashlib
 import json
 import math
 import os
+import selectors
 import signal
 import subprocess
-import threading
 import time
-from typing import Any, BinaryIO, Sequence
+from typing import Any, Sequence
 
 from .prospect_real_model_runner import (
     BackendMetricValue,
@@ -194,6 +194,7 @@ def _run_bounded_backend_process(
             stderr=subprocess.PIPE,
             shell=False,
             start_new_session=True,
+            bufsize=0,
         )
     except OSError as error:
         raise ProspectKvRealModelRunnerError(
@@ -204,126 +205,125 @@ def _run_bounded_backend_process(
     assert process.stdout is not None
     assert process.stderr is not None
 
+    selector = selectors.DefaultSelector()
     stdout_chunks: list[bytes] = []
     stderr_chunks: list[bytes] = []
-    stdout_state = {"bytes": 0}
-    stderr_state = {"bytes": 0}
-    pipe_errors: list[BaseException] = []
-
-    stdout_thread = threading.Thread(
-        target=_drain_pipe_bounded,
-        args=(process.stdout, _MAX_BACKEND_STDOUT_BYTES, stdout_chunks, stdout_state, pipe_errors),
-        daemon=True,
-        name="kvlab-backend-stdout",
-    )
-    stderr_thread = threading.Thread(
-        target=_drain_pipe_bounded,
-        args=(process.stderr, _MAX_BACKEND_STDERR_BYTES, stderr_chunks, stderr_state, pipe_errors),
-        daemon=True,
-        name="kvlab-backend-stderr",
-    )
-    stdin_thread = threading.Thread(
-        target=_write_backend_stdin,
-        args=(process.stdin, payload, pipe_errors),
-        daemon=True,
-        name="kvlab-backend-stdin",
-    )
-    stdout_thread.start()
-    stderr_thread.start()
-    stdin_thread.start()
-
+    byte_counts = {"stdout": 0, "stderr": 0}
+    stdin_payload = memoryview(payload)
+    stdin_offset = 0
     timed_out = False
+    process_exited_at: float | None = None
+    drain_deadline: float | None = None
+    lingering_pipes = False
+
+    for pipe in (process.stdin, process.stdout, process.stderr):
+        os.set_blocking(pipe.fileno(), False)
+    if payload:
+        selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
+    else:
+        process.stdin.close()
+    selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+    selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+
     try:
-        process.wait(timeout=max(0.0, deadline - time.monotonic()))
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        _kill_backend_process_group(process)
+        while True:
+            now = time.monotonic()
+            if process.poll() is not None and process_exited_at is None:
+                process_exited_at = now
+                drain_deadline = min(deadline, now + _POST_KILL_DRAIN_SECONDS)
+            if process_exited_at is not None and not selector.get_map():
+                break
 
-    drain_deadline = (
-        time.monotonic() + _POST_KILL_DRAIN_SECONDS if timed_out else deadline
-    )
-    for thread in (stdin_thread, stdout_thread, stderr_thread):
-        thread.join(timeout=max(0.0, drain_deadline - time.monotonic()))
+            if not timed_out and now >= deadline:
+                timed_out = True
+                _close_selector_pipe(selector, process.stdin)
+                _kill_backend_process_group(process)
+                process_exited_at = time.monotonic()
+                drain_deadline = process_exited_at + _POST_KILL_DRAIN_SECONDS
+                now = process_exited_at
 
-    lingering = [
-        thread.name
-        for thread in (stdin_thread, stdout_thread, stderr_thread)
-        if thread.is_alive()
-    ]
-    if lingering:
-        _kill_backend_process_group(process)
-        for pipe in (process.stdin, process.stdout, process.stderr):
-            try:
-                pipe.close()
-            except OSError:
-                pass
+            effective_deadline = drain_deadline if drain_deadline is not None else deadline
+            if now >= effective_deadline:
+                lingering_pipes = bool(selector.get_map())
+                break
+
+            events = selector.select(timeout=min(0.05, effective_deadline - now))
+            for key, _mask in events:
+                pipe = key.fileobj
+                stream = key.data
+                if stream == "stdin":
+                    try:
+                        written = os.write(pipe.fileno(), stdin_payload[stdin_offset:])
+                    except BrokenPipeError:
+                        _close_selector_pipe(selector, pipe)
+                        continue
+                    stdin_offset += written
+                    if stdin_offset == len(payload):
+                        _close_selector_pipe(selector, pipe)
+                    continue
+
+                chunk = os.read(pipe.fileno(), _PIPE_READ_CHUNK_BYTES)
+                if not chunk:
+                    _close_selector_pipe(selector, pipe)
+                    continue
+                previous = byte_counts[stream]
+                byte_counts[stream] = previous + len(chunk)
+                limit = (
+                    _MAX_BACKEND_STDOUT_BYTES
+                    if stream == "stdout"
+                    else _MAX_BACKEND_STDERR_BYTES
+                )
+                remaining = max(0, (limit + 1) - previous)
+                if remaining:
+                    target = stdout_chunks if stream == "stdout" else stderr_chunks
+                    target.append(chunk[:remaining])
+    except OSError as error:
         raise ProspectKvRealModelRunnerError(
-            "external backend pipe drain exceeded the wall-clock deadline"
-        )
+            "external backend pipe supervision failed"
+        ) from error
+    finally:
+        for key in list(selector.get_map().values()):
+            _close_selector_pipe(selector, key.fileobj)
+        selector.close()
+        if lingering_pipes or process.poll() is None:
+            _kill_backend_process_group(process)
 
     if timed_out:
         raise ProspectKvRealModelRunnerError(
             "external backend exceeded the wall-clock deadline"
         )
-    if pipe_errors:
+    if lingering_pipes:
         raise ProspectKvRealModelRunnerError(
-            "external backend pipe supervision failed"
-        ) from pipe_errors[0]
-    if stdout_state["bytes"] > _MAX_BACKEND_STDOUT_BYTES:
+            "external backend pipe drain exceeded the wall-clock deadline"
+        )
+    if byte_counts["stdout"] > _MAX_BACKEND_STDOUT_BYTES:
         raise ProspectKvRealModelRunnerError(
             "external backend stdout exceeded the byte limit"
         )
-    if stderr_state["bytes"] > _MAX_BACKEND_STDERR_BYTES:
+    if byte_counts["stderr"] > _MAX_BACKEND_STDERR_BYTES:
         raise ProspectKvRealModelRunnerError(
             "external backend stderr exceeded the byte limit"
+        )
+    if process.returncode is None:
+        raise ProspectKvRealModelRunnerError(
+            "external backend did not report an exit status"
         )
 
     return process.returncode, b"".join(stdout_chunks), b"".join(stderr_chunks)
 
 
-def _drain_pipe_bounded(
-    pipe: BinaryIO,
-    limit: int,
-    chunks: list[bytes],
-    state: dict[str, int],
-    errors: list[BaseException],
+def _close_selector_pipe(
+    selector: selectors.BaseSelector,
+    pipe: Any,
 ) -> None:
     try:
-        while True:
-            chunk = pipe.read(_PIPE_READ_CHUNK_BYTES)
-            if not chunk:
-                break
-            previous = state["bytes"]
-            state["bytes"] = previous + len(chunk)
-            remaining = max(0, (limit + 1) - previous)
-            if remaining:
-                chunks.append(chunk[:remaining])
-    except BaseException as error:
-        errors.append(error)
-    finally:
-        try:
-            pipe.close()
-        except OSError:
-            pass
-
-
-def _write_backend_stdin(
-    pipe: BinaryIO,
-    payload: bytes,
-    errors: list[BaseException],
-) -> None:
-    try:
-        pipe.write(payload)
-        pipe.flush()
-    except BrokenPipeError:
+        selector.unregister(pipe)
+    except (KeyError, ValueError):
         pass
-    except BaseException as error:
-        errors.append(error)
-    finally:
-        try:
-            pipe.close()
-        except OSError:
-            pass
+    try:
+        pipe.close()
+    except OSError:
+        pass
 
 
 def _kill_backend_process_group(process: subprocess.Popen[bytes]) -> None:

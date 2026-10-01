@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from kvlab.prospect_real_model_runner import (
     BackendMetricValue,
@@ -223,6 +224,120 @@ class ProspectKvRealModelRunnerV4Tests(unittest.TestCase):
                 time.sleep(0.02)
             else:
                 self.fail("backend descendant survived process-group timeout")
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_exited_leader_kills_same_group_child_holding_pipe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pid_path = Path(directory) / "lingering.pid"
+            script = (
+                "import subprocess,sys;"
+                "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)']);"
+                f"open({str(pid_path)!r},'w',encoding='utf-8').write(str(child.pid))"
+            )
+            backend = ExternalJsonBackendV4(
+                command=(sys.executable, "-c", script), timeout_seconds=3.0
+            )
+            started = time.monotonic()
+            try:
+                with self.assertRaisesRegex(
+                    ProspectKvRealModelRunnerError, "pipe drain exceeded"
+                ):
+                    backend.execute(
+                        {"mode": "baseline", "policy": None, "retained_positions": []}
+                    )
+                self.assertLess(time.monotonic() - started, 3.0)
+                descendant_pid = int(pid_path.read_text(encoding="utf-8"))
+                state_path = Path(f"/proc/{descendant_pid}/stat")
+                for _ in range(50):
+                    if not state_path.exists():
+                        break
+                    fields = state_path.read_text(encoding="utf-8").split()
+                    if len(fields) >= 3 and fields[2] == "Z":
+                        break
+                    time.sleep(0.02)
+                else:
+                    self.fail("same-group child survived the bounded pipe drain")
+            finally:
+                if pid_path.exists():
+                    try:
+                        os.kill(int(pid_path.read_text(encoding="utf-8")), 9)
+                    except ProcessLookupError:
+                        pass
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_timeout_does_not_block_on_escaped_descendant_pipe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pid_path = Path(directory) / "escaped.pid"
+            script = (
+                "import subprocess,sys,time;"
+                "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],"
+                "start_new_session=True);"
+                f"open({str(pid_path)!r},'w',encoding='utf-8').write(str(child.pid));"
+                "time.sleep(60)"
+            )
+            backend = ExternalJsonBackendV4(
+                command=(sys.executable, "-c", script), timeout_seconds=0.2
+            )
+            started = time.monotonic()
+            try:
+                with self.assertRaisesRegex(
+                    ProspectKvRealModelRunnerError, "wall-clock deadline"
+                ):
+                    backend.execute(
+                        {"mode": "baseline", "policy": None, "retained_positions": []}
+                    )
+                self.assertLess(time.monotonic() - started, 3.0)
+            finally:
+                if pid_path.exists():
+                    try:
+                        os.kill(int(pid_path.read_text(encoding="utf-8")), 9)
+                    except ProcessLookupError:
+                        pass
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_large_backend_stdin_uses_zero_copy_memoryview_slices(self):
+        script = (
+            "import base64,hashlib,json,sys,time;"
+            "time.sleep(0.05);"
+            "request=json.load(sys.stdin);"
+            "payload=json.dumps(request,sort_keys=True,separators=(',',':'));"
+            "response={'schema':'kvlab.prospect-kv-backend-response/v4',"
+            "'request_sha256':hashlib.sha256(payload.encode()).hexdigest(),"
+            "'applied_mode':request['mode'],'applied_policy':request['policy'],"
+            "'applied_retained_positions':request['retained_positions'],"
+            "'output_artifact_base64':base64.b64encode(b'ok').decode(),"
+            "'metrics':[{'name':'token_accuracy','kind':'quality','unit':'ratio',"
+            "'preference':'higher_is_better','value':1.0}]};"
+            "sys.stdout.write(json.dumps(response,sort_keys=True,separators=(',',':')))"
+        )
+        backend = ExternalJsonBackendV4(
+            command=(sys.executable, "-c", script), timeout_seconds=5.0
+        )
+        original_write = os.write
+        large_write_types = []
+
+        def recording_write(file_descriptor, data):
+            if len(data) > 4096:
+                large_write_types.append(type(data))
+            return original_write(file_descriptor, data)
+
+        request = {
+            "mode": "baseline",
+            "policy": None,
+            "retained_positions": [],
+            "padding": "x" * (256 * 1024),
+        }
+        with mock.patch(
+            "kvlab.prospect_real_model_runner_v4.os.write",
+            side_effect=recording_write,
+        ):
+            observation = backend.execute(request)
+
+        self.assertEqual(observation.artifact_bytes, b"ok")
+        self.assertGreater(len(large_write_types), 1)
+        self.assertTrue(
+            all(payload_type is memoryview for payload_type in large_write_types)
+        )
 
     @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
     def test_external_backend_stdout_is_capped_while_drained(self):
