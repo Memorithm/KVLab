@@ -209,6 +209,7 @@ def _run_bounded_backend_process(
     stdout_chunks: list[bytes] = []
     stderr_chunks: list[bytes] = []
     byte_counts = {"stdout": 0, "stderr": 0}
+    stdin_payload = memoryview(payload)
     stdin_offset = 0
     timed_out = False
     process_exited_at: float | None = None
@@ -252,7 +253,7 @@ def _run_bounded_backend_process(
                 stream = key.data
                 if stream == "stdin":
                     try:
-                        written = os.write(pipe.fileno(), payload[stdin_offset:])
+                        written = os.write(pipe.fileno(), stdin_payload[stdin_offset:])
                     except BrokenPipeError:
                         _close_selector_pipe(selector, pipe)
                         continue
