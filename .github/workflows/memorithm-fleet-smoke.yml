@@ -8,6 +8,7 @@ on:
       - 'tests/**'
       - 'rust/bkv_scan/**'
       - '.github/workflows/memorithm-fleet-smoke.yml'
+      - '.github/workflows/ci.yml'
   workflow_dispatch:
 
 permissions:
