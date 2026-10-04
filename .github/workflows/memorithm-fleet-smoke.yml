@@ -1,0 +1,64 @@
+name: Memorithm fleet smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/memorithm-fleet-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memorithm-fleet-smoke-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  light:
+    runs-on: [self-hosted, Linux, ARM64, memorithm-ci, thor-general, ci-light, trusted-main]
+    timeout-minutes: 5
+    steps:
+      - name: Verify non-privileged shared light lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = Linux
+          test "$RUNNER_ARCH" = ARM64
+          test "$(hostname)" = tarek
+          if sudo -n true 2>/dev/null; then
+            echo "SHARED_RUNNER_UNEXPECTED_SUDO=true" >&2
+            exit 71
+          fi
+          groups="$(id -nG)"
+          for forbidden in sudo wheel docker lxd; do
+            if grep -qw "$forbidden" <<<"$groups"; then
+              echo "SHARED_RUNNER_FORBIDDEN_GROUP=$forbidden" >&2
+              exit 72
+            fi
+          done
+          printf 'MEMORITHM_FLEET_LIGHT_OK repo=%s runner=%s host=%s user=%s\n'             "$GITHUB_REPOSITORY" "$RUNNER_NAME" "$(hostname)" "$(id -un)"
+
+  heavy:
+    runs-on: [self-hosted, Linux, ARM64, memorithm-ci, thor-general, ci-heavy, trusted-main]
+    timeout-minutes: 5
+    steps:
+      - name: Verify non-privileged shared heavy lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = Linux
+          test "$RUNNER_ARCH" = ARM64
+          test "$(hostname)" = tarek
+          if sudo -n true 2>/dev/null; then
+            echo "SHARED_RUNNER_UNEXPECTED_SUDO=true" >&2
+            exit 71
+          fi
+          groups="$(id -nG)"
+          for forbidden in sudo wheel docker lxd; do
+            if grep -qw "$forbidden" <<<"$groups"; then
+              echo "SHARED_RUNNER_FORBIDDEN_GROUP=$forbidden" >&2
+              exit 72
+            fi
+          done
+          printf 'MEMORITHM_FLEET_HEAVY_OK repo=%s runner=%s host=%s user=%s\n'             "$GITHUB_REPOSITORY" "$RUNNER_NAME" "$(hostname)" "$(id -un)"
