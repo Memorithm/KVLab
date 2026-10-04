@@ -1,0 +1,26 @@
+name: Memorithm organization runner lane probe
+on:
+  push:
+    branches: [ops/org-runner-lane-probe]
+    paths:
+      - '.github/workflows/org-runner-lane-probe.yml'
+permissions:
+  contents: read
+concurrency:
+  group: kvlab-org-runner-lane-probe
+  cancel-in-progress: true
+jobs:
+  probe:
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 5
+    steps:
+      - name: Verify organization lane without repository checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "Memorithm/KVLab"
+          test "$RUNNER_OS" = "Linux"
+          test "$RUNNER_ARCH" = "ARM64"
+          test "$(hostname)" = "tarek"
+          printf 'ORG_LANE_PROBE repo=%s runner=%s os=%s arch=%s host=%s\n'             "$GITHUB_REPOSITORY" "$RUNNER_NAME" "$RUNNER_OS" "$RUNNER_ARCH" "$(hostname)"
+          echo 'ORG_LANE_KVLAB_ACCESS=true'
