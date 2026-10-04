@@ -1,9 +1,12 @@
-name: Memorithm fleet smoke
+name: Memorithm fleet main CI
 
 on:
   push:
     branches: [main]
     paths:
+      - 'kvlab/**'
+      - 'tests/**'
+      - 'rust/bkv_scan/**'
       - '.github/workflows/memorithm-fleet-smoke.yml'
   workflow_dispatch:
 
@@ -11,54 +14,51 @@ permissions:
   contents: read
 
 concurrency:
-  group: memorithm-fleet-smoke-${{ github.repository }}
+  group: memorithm-fleet-main-${{ github.repository }}
   cancel-in-progress: true
 
 jobs:
-  light:
+  python:
     runs-on: [self-hosted, Linux, ARM64, memorithm-ci, thor-general, ci-light, trusted-main]
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - name: Verify non-privileged shared light lane
+      - name: Verify non-privileged shared lane
         shell: bash
         run: |
           set -euo pipefail
-          test "$RUNNER_OS" = Linux
-          test "$RUNNER_ARCH" = ARM64
           test "$(hostname)" = tarek
-          if sudo -n true 2>/dev/null; then
-            echo "SHARED_RUNNER_UNEXPECTED_SUDO=true" >&2
-            exit 71
-          fi
-          groups="$(id -nG)"
-          for forbidden in sudo wheel docker lxd; do
-            if grep -qw "$forbidden" <<<"$groups"; then
-              echo "SHARED_RUNNER_FORBIDDEN_GROUP=$forbidden" >&2
-              exit 72
-            fi
-          done
-          printf 'MEMORITHM_FLEET_LIGHT_OK repo=%s runner=%s host=%s user=%s\n'             "$GITHUB_REPOSITORY" "$RUNNER_NAME" "$(hostname)" "$(id -un)"
+          if sudo -n true 2>/dev/null; then exit 71; fi
+          for forbidden in sudo wheel docker lxd; do ! id -nG | grep -qw "$forbidden"; done
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Compile
+        run: python3 -m compileall -q kvlab tests
+      - name: Tests
+        run: python3 -m unittest discover -s tests -v
 
-  heavy:
+  rust-bkv:
     runs-on: [self-hosted, Linux, ARM64, memorithm-ci, thor-general, ci-heavy, trusted-main]
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - name: Verify non-privileged shared heavy lane
+      - name: Verify non-privileged shared lane
         shell: bash
         run: |
           set -euo pipefail
-          test "$RUNNER_OS" = Linux
-          test "$RUNNER_ARCH" = ARM64
           test "$(hostname)" = tarek
-          if sudo -n true 2>/dev/null; then
-            echo "SHARED_RUNNER_UNEXPECTED_SUDO=true" >&2
-            exit 71
-          fi
-          groups="$(id -nG)"
-          for forbidden in sudo wheel docker lxd; do
-            if grep -qw "$forbidden" <<<"$groups"; then
-              echo "SHARED_RUNNER_FORBIDDEN_GROUP=$forbidden" >&2
-              exit 72
-            fi
-          done
-          printf 'MEMORITHM_FLEET_HEAVY_OK repo=%s runner=%s host=%s user=%s\n'             "$GITHUB_REPOSITORY" "$RUNNER_NAME" "$(hostname)" "$(id -un)"
+          if sudo -n true 2>/dev/null; then exit 71; fi
+          for forbidden in sudo wheel docker lxd; do ! id -nG | grep -qw "$forbidden"; done
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --manifest-path rust/bkv_scan/Cargo.toml -- --check
+      - name: Clippy
+        run: cargo clippy --manifest-path rust/bkv_scan/Cargo.toml --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --manifest-path rust/bkv_scan/Cargo.toml
