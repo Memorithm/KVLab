@@ -5,9 +5,14 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 manifest="rust/bkv_scan/Cargo.toml"
+lockfile="rust/bkv_scan/Cargo.lock"
 evidence_dir="${EWW_EVIDENCE_DIR:-target/eww-evidence}"
 rm -rf "$evidence_dir"
 mkdir -p "$evidence_dir"
+test -s "$lockfile"
+cp "$lockfile" "$evidence_dir/Cargo.lock"
+cargo metadata --locked --manifest-path "$manifest" --format-version 1 > "$evidence_dir/cargo-metadata.json"
+sha256sum "$evidence_dir/Cargo.lock" "$evidence_dir/cargo-metadata.json" > "$evidence_dir/SHA256SUMS"
 
 git_head="$(git rev-parse HEAD)"
 rustc_version="$(rustc --version)"
@@ -32,7 +37,7 @@ run_case() {
   shift 2
   echo
   echo "=== ${label} ==="
-  cargo run --quiet --release --manifest-path "$manifest" "$@" | tee "$evidence_dir/$output"
+  cargo run --quiet --release --locked --manifest-path "$manifest" "$@" | tee "$evidence_dir/$output"
   test -s "$evidence_dir/$output"
 }
 
@@ -69,6 +74,9 @@ run_case "EWW-K4e FLAT packed-u16 uniform utilization" "eww-k4e-flat-u16-uniform
 
 printf '%s\n' \
   "manifest.txt" \
+  "Cargo.lock" \
+  "cargo-metadata.json" \
+  "SHA256SUMS" \
   "eww-k1-fixed-width.csv" \
   "eww-k2-transition-cost.csv" \
   "eww-k3-adaptive-policy.csv" \

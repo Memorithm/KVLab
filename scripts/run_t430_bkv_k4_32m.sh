@@ -52,7 +52,7 @@ lscpu -e=CPU,CORE,SOCKET,NODE,ONLINE > "$OUT/lscpu-topology.txt"
 numactl --hardware > "$OUT/numactl-hardware.txt"
 cat /proc/meminfo > "$OUT/meminfo.txt"
 
-cargo build --release --manifest-path rust/bkv_scan/Cargo.toml --bins
+cargo build --locked --release --manifest-path rust/bkv_scan/Cargo.toml --bins
 BIN="$ROOT/rust/bkv_scan/target/release/bkv_flat_scan_bench"
 SUM="$ROOT/rust/bkv_scan/target/release/bkv_scaling_summary"
 
