@@ -26,6 +26,8 @@ control overhead is included.
 H5. K and V, layers and heads have different sensitivity and should not be
 forced into one uniform precision/residency policy without evidence.
 
+H6-H7 are defined in the dedicated TVCL section below and remain layout/locality hypotheses until measured.
+
 ## Campaign series
 
 ### SKV-0 — evaluator freeze
@@ -208,3 +210,83 @@ A useful result is not necessarily a positive speedup. The campaign succeeds
 scientifically if it narrows the admissible design space with reproducible
 positive **or negative** evidence. Product promotion requires a candidate that
 passes SLHAv2's destination quality gate and then physical qualification.
+
+## TVCL — Tri-View Causal Lattice layout campaign
+
+Status: research plan added 2026-10-05. TVCL is a representation/traversal
+experiment, not a new attention policy and not a modification of any frozen
+preregistration above.
+
+For every causal pair `0 <= j <= i < N`, define `d=i-j` and require three
+bijections over the identical `N(N+1)/2` logical domain:
+
+```text
+query-major:    kq = i(i+1)/2 + j
+distance-major: kd = d*N - d(d-1)/2 + j
+key-major:      kk = j*N - j(j-1)/2 + (i-j)
+```
+
+### TVCL hypotheses
+
+H6. For a fixed Boolean/signature policy and identical candidate set,
+distance-major storage may reduce traversal/materialization cost for age,
+sliding-window or relative-distance predicates because equal-distance pairs are
+contiguous.
+
+H7. For a fixed policy and identical candidate set, key-major storage may reduce
+per-key retention/reduction cost because all causally valid uses of one key are
+contiguous.
+
+These are locality hypotheses only. They make no cache, SIMD, bandwidth or
+latency claim until measured.
+
+### TVCL-0 — bijection oracle
+
+- deterministic scalar reference for all three index maps and inverses;
+- exhaustive small-N coverage/uniqueness tests;
+- boundary/overflow tests for production-sized index types;
+- exact causal-pair identity across layouts.
+
+### TVCL-1 — packed Boolean index comparison
+
+On frozen BIKV fixtures compare:
+
+- query-major;
+- distance-major;
+- key-major;
+- deterministic matched random permutation.
+
+Hold Boolean signature width, threshold/predicate, selected pages/blocks,
+candidate density and numerical K/V payload fixed. Measure layout bytes,
+conversion/materialization work and host traversal time separately.
+
+### TVCL-2 — policy/layout factorial
+
+Cross the layouts with preregistered policy families where semantics permit:
+
+- recency/age windows;
+- Boolean signature admission;
+- per-key retention/frequency reductions;
+- matched random/tail controls.
+
+This stage separates a better policy from a better layout.
+
+### TVCL-3 — FLAT handoff
+
+Export one frozen layout candidate only after TVCL-0..2. FLAT-ATTENTION owns
+portable device realization and physical timing. Require exact candidate
+identity before any performance comparison.
+
+### TVCL-4 — decision gate
+
+Retain a layout only if it improves a declared end-to-end systems objective
+after conversion/materialization overhead while preserving the frozen quality
+gate. Negative results are first-class evidence.
+
+### Evidence boundary
+
+Triangular packing has `N(N+1)/2` logical slots versus `N^2` for an explicit
+square causal relation matrix, but modern fused attention need not materialize
+that square matrix. Therefore KVLab must not report "50% VRAM saved" unless the
+measured baseline actually stores the corresponding square relation structure.
+

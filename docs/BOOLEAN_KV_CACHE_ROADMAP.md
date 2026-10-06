@@ -333,3 +333,55 @@ A Boolean KV candidate is promoted only when it passes its preregistered quality
 A separate future-only programme is defined in `DEEPSEEK_V41_KV_REUSE_REPLAY_ROADMAP.md`. It studies how Boolean KV selection composes with cross-layer reuse, hierarchical candidate pools, bounded replay and FP4/INT4 representation choices.
 
 BKV remains authoritative for Boolean-index semantics. DSV41-KV must not retune or reinterpret completed BKV experiments. Any combined experiment requires factorial controls separating Boolean selection benefit from layer reuse, precision reduction, and replay/recomputation.
+
+## BKV-K12 — Tri-View Causal Lattice (TVCL) layout qualification
+
+TVCL tests the memory order of causal Boolean-KV relation metadata while keeping
+selection semantics fixed. It is intentionally separate from BKV-K1 predicate
+quality and from the frozen elastic-width protocol.
+
+Required layouts over the exact same causal pair set:
+
+1. query-major `(i,j)`;
+2. distance-major `(d=i-j,j)`;
+3. key-major `(j,i-j)`;
+4. deterministic matched random permutation control.
+
+### Gate A — structural correctness
+
+- exhaustive small-domain bijection/inverse tests;
+- identical eligible causal pair IDs;
+- identical BIKV selected page/block IDs;
+- stale generation/reset semantics unchanged.
+
+### Gate B — host locality experiment
+
+For identical fixtures record:
+
+- layout/index bytes including metadata/alignment;
+- conversion/materialization latency;
+- scan/reduction latency;
+- logical words/bytes touched;
+- candidate bitmap/set identity;
+- page/block density.
+
+Cache-miss, NUMA, SIMD or physical-bandwidth claims require corresponding
+measured counters; contiguity alone is not evidence.
+
+### Gate C — workload interactions
+
+Test distance-major specifically with age/window predicates and key-major with
+retention/frequency reductions, but include query-major and random-order
+controls at exactly matched candidate density. Factor policy and layout so a
+selection-quality change cannot masquerade as a layout benefit.
+
+### Gate D — FLAT physical consumer
+
+Only a frozen host-qualified layout may be exported to FLAT-ATTENTION. Require
+host/device candidate parity and numerical O/LSE parity before same-device
+timing. Report Boolean routing, materialization/upload, survivor attention and
+end-to-end time separately.
+
+Stop rule: if no TVCL order improves the declared objective after conversion and
+metadata overhead, preserve the current layout and retain the negative result.
+
