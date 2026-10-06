@@ -109,7 +109,7 @@ cp "$TOPOLOGY_CSV" "$OUT/lscpu-topology.csv"
 numactl --hardware > "$OUT/numactl-hardware.txt"
 cat /proc/meminfo > "$OUT/meminfo.txt"
 
-cargo build --release --manifest-path rust/bkv_scan/Cargo.toml --bins
+cargo build --locked --release --manifest-path rust/bkv_scan/Cargo.toml --bins
 BIN="$ROOT/rust/bkv_scan/target/release/bkv_flat_scan_bench"
 
 run_pair() {

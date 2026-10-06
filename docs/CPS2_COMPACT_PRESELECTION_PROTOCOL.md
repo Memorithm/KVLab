@@ -150,15 +150,15 @@ The repository CI gate for this slice runs:
 
 ```bash
 cargo fmt --manifest-path rust/bkv_scan/Cargo.toml -- --check
-cargo clippy --manifest-path rust/bkv_scan/Cargo.toml --all-targets -- -D warnings
-cargo test --manifest-path rust/bkv_scan/Cargo.toml
+cargo clippy --locked --manifest-path rust/bkv_scan/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path rust/bkv_scan/Cargo.toml
 ```
 
 The Rust tests include deterministic repeated-panel equality under a frozen
 seed. The CSV runner is an explicit evidence command, not an implicit CI claim:
 
 ```bash
-cargo run --manifest-path rust/bkv_scan/Cargo.toml --bin cps2_compact_panel
+cargo run --locked --manifest-path rust/bkv_scan/Cargo.toml --bin cps2_compact_panel
 ```
 
 If CSV output is retained as evidence, run the command twice on the same exact
