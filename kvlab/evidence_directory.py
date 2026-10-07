@@ -25,8 +25,10 @@ def prepare_evidence_directory(*, repo_root: Path, requested: str) -> Path:
     canonicalization.  Existing paths are preserved rather than overwritten.
     """
 
-    if not isinstance(requested, str) or not requested or "\x00" in requested:
+    if not isinstance(requested, str) or not requested:
         raise ValueError("evidence directory must be a non-empty path")
+    if any(ord(character) < 32 or ord(character) == 127 for character in requested):
+        raise ValueError("evidence directory must not contain control characters")
 
     requested_path = Path(requested)
     if requested_path.is_absolute():

@@ -45,6 +45,23 @@ class EvidenceDirectoryTests(unittest.TestCase):
                 requested=str(self.repo_root / "target" / "absolute"),
             )
 
+    def test_rejects_control_characters_without_touching_trimmed_sibling(self) -> None:
+        evidence_dir = self.repo_root / "target" / "eww-evidence"
+        evidence_dir.mkdir(parents=True)
+        sentinel = evidence_dir / "sentinel.txt"
+        sentinel.write_text("preserve me\n", encoding="utf-8")
+
+        for suffix in ("\n", "\r", "\t", "\x7f"):
+            with self.subTest(suffix=repr(suffix)), self.assertRaisesRegex(
+                ValueError, "control characters"
+            ):
+                prepare_evidence_directory(
+                    repo_root=self.repo_root,
+                    requested=f"target/eww-evidence{suffix}",
+                )
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve me\n")
+
     def test_rejects_parent_traversal(self) -> None:
         with self.assertRaisesRegex(ValueError, "stay below"):
             prepare_evidence_directory(
