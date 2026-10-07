@@ -7,14 +7,15 @@
 
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
 use flat_attention::WgpuPagedKvTable;
+use kvlab_bkv_scan::provenance::FLAT_ATTENTION_EXECUTED_REVISION;
 
 const WGSL_PAGED_MAX_LOGICAL_PAGES_PINNED: usize = 256;
 use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
 
-const SCHEMA: &str = "kvlab.eww-k4b-flat-w64-to-w32/v1";
-const FLAT_REVISION: &str = "7bd9f1a2254d10329861e41a11694e7b4cffdd6b";
+const SCHEMA: &str = "kvlab.eww-k4b-flat-w64-to-w32/v2";
+const CONTRACT_ORIGIN_REVISION: &str = "7bd9f1a2254d10329861e41a11694e7b4cffdd6b";
 const PAGE_COUNTS: [usize; 5] = [1, 4, 16, 64, 256];
 const PAGE_SIZE: usize = 16;
 const WARMUP: usize = 2;
@@ -78,7 +79,7 @@ fn run() -> Result<(), String> {
     }
 
     println!(
-        "schema,flat_revision,page_size,mapped_pages,host_w64_page_map_bytes,device_w32_page_map_bytes,projection_median_ns,projection_min_ns,projection_max_ns,generation,uniform_encoded_bytes_status,gpu_status"
+        "schema,contract_origin_revision,executed_dependency_revision,page_size,mapped_pages,host_w64_page_map_bytes,device_w32_page_map_bytes,projection_median_ns,projection_min_ns,projection_max_ns,generation,uniform_encoded_bytes_status,gpu_status"
     );
 
     for mapped_pages in PAGE_COUNTS {
@@ -104,7 +105,7 @@ fn run() -> Result<(), String> {
         }
 
         println!(
-            "{SCHEMA},{FLAT_REVISION},{PAGE_SIZE},{mapped_pages},{host_w64_page_map_bytes},{device_w32_page_map_bytes},{median_ns},{min_ns},{max_ns},{},not-exposed-by-pinned-revision,not-executed",
+            "{SCHEMA},{CONTRACT_ORIGIN_REVISION},{FLAT_ATTENTION_EXECUTED_REVISION},{PAGE_SIZE},{mapped_pages},{host_w64_page_map_bytes},{device_w32_page_map_bytes},{median_ns},{min_ns},{max_ns},{},not-exposed-by-pinned-revision,not-executed",
             device.generation()
         );
     }

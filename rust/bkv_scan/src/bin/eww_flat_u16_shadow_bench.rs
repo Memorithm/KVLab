@@ -9,12 +9,13 @@ use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
 use flat_attention::{
     WgpuPackedPagedKvTable16, WgpuPagedKvTable, WGSL_PAGED_U16_MAX_PHYSICAL_PAGES,
 };
+use kvlab_bkv_scan::provenance::FLAT_ATTENTION_EXECUTED_REVISION;
 use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
 
-const SCHEMA: &str = "kvlab.eww-k4c-packed-u16-shadow/v1";
-const FLAT_REVISION: &str = "512224212ad834f19c407878ff4e6569fdcbe508";
+const SCHEMA: &str = "kvlab.eww-k4c-packed-u16-shadow/v2";
+const CONTRACT_ORIGIN_REVISION: &str = "512224212ad834f19c407878ff4e6569fdcbe508";
 const PAGE_COUNTS: [usize; 5] = [1, 4, 16, 64, 256];
 const PAGE_SIZE: usize = 16;
 const WARMUP: usize = 2;
@@ -76,7 +77,7 @@ fn run() -> Result<(), String> {
     }
 
     println!(
-        "schema,flat_revision,mapped_pages,host_w64_bytes,w32_page_map_bytes,u16_packed_bytes,u16_theoretical_uniform_bytes,w32_projection_median_ns,u16_projection_median_ns,w32_projection_min_ns,u16_projection_min_ns,w32_projection_max_ns,u16_projection_max_ns,gpu_status,u16_shader_status"
+        "schema,contract_origin_revision,executed_dependency_revision,mapped_pages,host_w64_bytes,w32_page_map_bytes,u16_packed_bytes,u16_theoretical_uniform_bytes,w32_projection_median_ns,u16_projection_median_ns,w32_projection_min_ns,u16_projection_min_ns,w32_projection_max_ns,u16_projection_max_ns,gpu_status,u16_shader_status"
     );
 
     for mapped_pages in PAGE_COUNTS {
@@ -111,7 +112,7 @@ fn run() -> Result<(), String> {
         let u16_theoretical_uniform_bytes = packed.theoretical_encoded_uniform_bytes();
 
         println!(
-            "{SCHEMA},{FLAT_REVISION},{mapped_pages},{host_w64_bytes},{w32_page_map_bytes},{u16_packed_bytes},{u16_theoretical_uniform_bytes},{w32_med},{u16_med},{w32_min},{u16_min},{w32_max},{u16_max},not-executed,shadow-only"
+            "{SCHEMA},{CONTRACT_ORIGIN_REVISION},{FLAT_ATTENTION_EXECUTED_REVISION},{mapped_pages},{host_w64_bytes},{w32_page_map_bytes},{u16_packed_bytes},{u16_theoretical_uniform_bytes},{w32_med},{u16_med},{w32_min},{u16_min},{w32_max},{u16_max},not-executed,shadow-only"
         );
     }
 
