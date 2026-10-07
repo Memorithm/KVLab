@@ -6,8 +6,7 @@
 //! separate CSV field and must never be presented as the code executed now.
 
 /// Exact direct FLAT dependency revision executed by binaries in this crate.
-pub const FLAT_ATTENTION_EXECUTED_REVISION: &str =
-    env!("KVLAB_FLAT_ATTENTION_EXECUTED_REVISION");
+pub const FLAT_ATTENTION_EXECUTED_REVISION: &str = env!("KVLAB_FLAT_ATTENTION_EXECUTED_REVISION");
 
 #[cfg(test)]
 mod tests {

@@ -35,10 +35,10 @@ fn main() {
     println!("cargo:rerun-if-changed=Cargo.lock");
 
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
-    let manifest = fs::read_to_string(manifest_dir.join("Cargo.toml"))
-        .expect("read bkv_scan Cargo.toml");
-    let lock = fs::read_to_string(manifest_dir.join("Cargo.lock"))
-        .expect("read bkv_scan Cargo.lock");
+    let manifest =
+        fs::read_to_string(manifest_dir.join("Cargo.toml")).expect("read bkv_scan Cargo.toml");
+    let lock =
+        fs::read_to_string(manifest_dir.join("Cargo.lock")).expect("read bkv_scan Cargo.lock");
     let revision = extract_direct_revision(&manifest).expect("resolve direct FLAT revision");
     let locked_source = format!(
         "source = \"git+https://github.com/Memorithm/FLAT-ATTENTION.git?rev={revision}#{revision}\""
