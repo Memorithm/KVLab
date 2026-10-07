@@ -10,6 +10,57 @@
 pub mod cps2_compact_quality;
 pub mod provenance;
 
+/// Repository-wide hard ceiling for one packed-scan worker pool.
+///
+/// Callers may choose a lower cap through [`ScanExecutionBudget`], but cannot
+/// raise this process-resource boundary.
+pub const MAX_SCAN_THREADS: usize = 64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScanExecutionBudget {
+    requested_threads: usize,
+    max_threads: usize,
+}
+
+impl ScanExecutionBudget {
+    pub fn new(requested_threads: usize, max_threads: usize) -> Result<Self, ScanError> {
+        if requested_threads == 0 {
+            return Err(ScanError::ZeroWorkers);
+        }
+        if max_threads == 0 {
+            return Err(ScanError::ZeroWorkerBudget);
+        }
+        if max_threads > MAX_SCAN_THREADS {
+            return Err(ScanError::WorkerBudgetTooLarge {
+                max_threads,
+                hard_limit: MAX_SCAN_THREADS,
+            });
+        }
+        if requested_threads > max_threads {
+            return Err(ScanError::WorkerBudgetExceeded {
+                requested_threads,
+                max_threads,
+            });
+        }
+        Ok(Self {
+            requested_threads,
+            max_threads,
+        })
+    }
+
+    pub fn requested_threads(self) -> usize {
+        self.requested_threads
+    }
+
+    pub fn max_threads(self) -> usize {
+        self.max_threads
+    }
+
+    pub fn worker_count(self, work_items: usize) -> usize {
+        self.requested_threads.min(work_items)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanResult {
     pub selected_pages: Vec<usize>,
@@ -28,6 +79,16 @@ pub enum ScanError {
     NonZeroTailBits,
     DistanceOutOfRange,
     ZeroWorkers,
+    ZeroWorkerBudget,
+    WorkerBudgetTooLarge {
+        max_threads: usize,
+        hard_limit: usize,
+    },
+    WorkerBudgetExceeded {
+        requested_threads: usize,
+        max_threads: usize,
+    },
+    WorkerSpawnFailed { worker_index: usize },
     WorkerPanicked,
 }
 
@@ -194,36 +255,52 @@ pub fn scan_packed_pages_parallel(
     query: &[u64],
     pages: &[Vec<u64>],
     max_distance: usize,
-    workers: usize,
+    budget: ScanExecutionBudget,
 ) -> Result<ScanResult, ScanError> {
     validate_scan_inputs(signature_bits, query, pages, max_distance)?;
-    if workers == 0 {
-        return Err(ScanError::ZeroWorkers);
-    }
 
-    let worker_count = workers.min(pages.len());
+    let worker_count = budget.worker_count(pages.len());
     let shard_size = pages.len().div_ceil(worker_count);
     let selected_pages = std::thread::scope(|scope| {
         let mut handles = Vec::with_capacity(worker_count);
-        for shard_start in (0..pages.len()).step_by(shard_size) {
+        let mut spawn_failure = None;
+        for (worker_index, shard_start) in (0..pages.len()).step_by(shard_size).enumerate() {
             let shard_end = (shard_start + shard_size).min(pages.len());
             let shard = &pages[shard_start..shard_end];
-            handles.push(scope.spawn(move || {
-                shard
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(local_id, page)| {
-                        (hamming_distance_validated(query, page) as usize <= max_distance)
-                            .then_some(shard_start + local_id)
-                    })
-                    .collect::<Vec<_>>()
-            }));
+            let handle = std::thread::Builder::new()
+                .name(format!("bkv-scan-{worker_index}"))
+                .spawn_scoped(scope, move || {
+                    shard
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(local_id, page)| {
+                            (hamming_distance_validated(query, page) as usize <= max_distance)
+                                .then_some(shard_start + local_id)
+                        })
+                        .collect::<Vec<_>>()
+                });
+            match handle {
+                Ok(handle) => handles.push(handle),
+                Err(_) => {
+                    spawn_failure = Some(worker_index);
+                    break;
+                }
+            }
         }
 
         let mut merged = Vec::new();
+        let mut worker_panicked = false;
         for handle in handles {
-            let mut shard_candidates = handle.join().map_err(|_| ScanError::WorkerPanicked)?;
-            merged.append(&mut shard_candidates);
+            match handle.join() {
+                Ok(mut shard_candidates) => merged.append(&mut shard_candidates),
+                Err(_) => worker_panicked = true,
+            }
+        }
+        if let Some(worker_index) = spawn_failure {
+            return Err(ScanError::WorkerSpawnFailed { worker_index });
+        }
+        if worker_panicked {
+            return Err(ScanError::WorkerPanicked);
         }
         Ok::<Vec<usize>, ScanError>(merged)
     })?;
@@ -273,7 +350,8 @@ mod tests {
         let pages = sample_pages();
         let scalar = scan_packed_pages(4, &query, &pages, 1).unwrap();
         for workers in [1, 2, 3, 4, 7, 16] {
-            let parallel = scan_packed_pages_parallel(4, &query, &pages, 1, workers).unwrap();
+            let budget = ScanExecutionBudget::new(workers, workers).unwrap();
+            let parallel = scan_packed_pages_parallel(4, &query, &pages, 1, budget).unwrap();
             assert_eq!(parallel, scalar, "worker count {workers}");
         }
     }
@@ -282,7 +360,8 @@ mod tests {
     fn parallel_scan_preserves_page_order_across_uneven_shards() {
         let query = [0_u64];
         let pages = vec![vec![0], vec![1], vec![0], vec![3], vec![0]];
-        let result = scan_packed_pages_parallel(2, &query, &pages, 0, 3).unwrap();
+        let budget = ScanExecutionBudget::new(3, 3).unwrap();
+        let result = scan_packed_pages_parallel(2, &query, &pages, 0, budget).unwrap();
         assert_eq!(result.selected_pages, vec![0, 2, 4]);
     }
 
@@ -291,8 +370,30 @@ mod tests {
         let query = [0_u64];
         let pages = vec![vec![0_u64]];
         assert_eq!(
-            scan_packed_pages_parallel(1, &query, &pages, 0, 0),
+            ScanExecutionBudget::new(0, 1),
             Err(ScanError::ZeroWorkers)
+        );
+    }
+
+    #[test]
+    fn parallel_scan_requires_a_bounded_execution_budget() {
+        assert_eq!(
+            ScanExecutionBudget::new(1, 0),
+            Err(ScanError::ZeroWorkerBudget)
+        );
+        assert_eq!(
+            ScanExecutionBudget::new(5, 4),
+            Err(ScanError::WorkerBudgetExceeded {
+                requested_threads: 5,
+                max_threads: 4,
+            })
+        );
+        assert_eq!(
+            ScanExecutionBudget::new(1, MAX_SCAN_THREADS + 1),
+            Err(ScanError::WorkerBudgetTooLarge {
+                max_threads: MAX_SCAN_THREADS + 1,
+                hard_limit: MAX_SCAN_THREADS,
+            })
         );
     }
 
@@ -411,8 +512,15 @@ mod tests {
             let scalar = scan_packed_pages(signature_bits, &query, &pages, 1).unwrap();
 
             for workers in [1_usize, 2, 4, 8] {
-                let parallel =
-                    scan_packed_pages_parallel(signature_bits, &query, &pages, 1, workers).unwrap();
+                let budget = ScanExecutionBudget::new(workers, workers).unwrap();
+                let parallel = scan_packed_pages_parallel(
+                    signature_bits,
+                    &query,
+                    &pages,
+                    1,
+                    budget,
+                )
+                .unwrap();
                 assert_eq!(
                     parallel, scalar,
                     "width {signature_bits}, worker count {workers}"

@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use kvlab_bkv_scan::ScanExecutionBudget;
+
 #[derive(Debug, Clone)]
 struct Config {
     total_pages: usize,
@@ -193,40 +195,61 @@ fn scan_parallel(
     page_offset: usize,
     shard_pages: usize,
     max_distance: usize,
-    workers: usize,
+    budget: ScanExecutionBudget,
 ) -> Result<Vec<usize>, String> {
     let words = validate_layout(signature_bits, query, flat_pages, shard_pages)?;
-    let worker_count = workers.min(shard_pages);
+    let worker_count = budget.worker_count(shard_pages);
     let shard_span = shard_pages.div_ceil(worker_count);
 
     std::thread::scope(|scope| {
         let mut handles = Vec::with_capacity(worker_count);
-        for local_start in (0..shard_pages).step_by(shard_span) {
+        let mut spawn_failure = None;
+        for (worker_index, local_start) in
+            (0..shard_pages).step_by(shard_span).enumerate()
+        {
             let local_end = (local_start + shard_span).min(shard_pages);
-            handles.push(scope.spawn(move || {
-                let mut selected = Vec::new();
-                for local_page in local_start..local_end {
-                    let start = local_page * words;
-                    let page = &flat_pages[start..start + words];
-                    let distance: u32 = query
-                        .iter()
-                        .zip(page.iter())
-                        .map(|(a, b)| (a ^ b).count_ones())
-                        .sum();
-                    if distance as usize <= max_distance {
-                        selected.push(page_offset + local_page);
+            let handle = std::thread::Builder::new()
+                .name(format!("bkv-distinct-scan-{worker_index}"))
+                .spawn_scoped(scope, move || {
+                    let mut selected = Vec::new();
+                    for local_page in local_start..local_end {
+                        let start = local_page * words;
+                        let page = &flat_pages[start..start + words];
+                        let distance: u32 = query
+                            .iter()
+                            .zip(page.iter())
+                            .map(|(a, b)| (a ^ b).count_ones())
+                            .sum();
+                        if distance as usize <= max_distance {
+                            selected.push(page_offset + local_page);
+                        }
                     }
+                    selected
+                });
+            match handle {
+                Ok(handle) => handles.push(handle),
+                Err(error) => {
+                    spawn_failure = Some((worker_index, error));
+                    break;
                 }
-                selected
-            }));
+            }
         }
 
         let mut merged = Vec::new();
+        let mut worker_panicked = false;
         for handle in handles {
-            let mut local = handle
-                .join()
-                .map_err(|_| "worker thread panicked".to_owned())?;
-            merged.append(&mut local);
+            match handle.join() {
+                Ok(mut local) => merged.append(&mut local),
+                Err(_) => worker_panicked = true,
+            }
+        }
+        if let Some((worker_index, error)) = spawn_failure {
+            return Err(format!(
+                "worker {worker_index} could not be spawned: {error}"
+            ));
+        }
+        if worker_panicked {
+            return Err("worker thread panicked".to_owned());
         }
         Ok::<Vec<usize>, String>(merged)
     })
@@ -252,6 +275,8 @@ fn write_selected(path: &PathBuf, selected: &[usize]) -> Result<(), String> {
 }
 
 fn run(config: Config) -> Result<(), String> {
+    let budget = ScanExecutionBudget::new(config.workers, config.workers)
+        .map_err(|error| format!("invalid worker budget: {error:?}"))?;
     let (query, flat_pages) = build_query_and_shard(
         config.total_pages,
         config.signature_bits,
@@ -275,7 +300,7 @@ fn run(config: Config) -> Result<(), String> {
         config.page_offset,
         config.shard_pages,
         config.max_distance,
-        config.workers,
+        budget,
     )?;
     if parallel != scalar {
         return Err("parallel distinct-shard candidates differ from scalar oracle".to_owned());
@@ -290,7 +315,7 @@ fn run(config: Config) -> Result<(), String> {
             config.page_offset,
             config.shard_pages,
             config.max_distance,
-            config.workers,
+            budget,
         )?);
     }
 
@@ -304,7 +329,7 @@ fn run(config: Config) -> Result<(), String> {
             config.page_offset,
             config.shard_pages,
             config.max_distance,
-            config.workers,
+            budget,
         )?);
         samples.push(start.elapsed().as_nanos());
     }
@@ -376,7 +401,8 @@ mod tests {
         let (query, flat) = build_query_and_shard(total, 128, offset, pages, 11).unwrap();
         let scalar = scan_scalar(128, &query, &flat, offset, pages, 64).unwrap();
         for workers in [1, 2, 4, 8, 32] {
-            let parallel = scan_parallel(128, &query, &flat, offset, pages, 64, workers).unwrap();
+            let budget = ScanExecutionBudget::new(workers, workers).unwrap();
+            let parallel = scan_parallel(128, &query, &flat, offset, pages, 64, budget).unwrap();
             assert_eq!(parallel, scalar);
         }
     }
