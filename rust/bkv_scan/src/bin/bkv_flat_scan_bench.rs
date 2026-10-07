@@ -5,6 +5,8 @@ use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use kvlab_bkv_scan::ScanExecutionBudget;
+
 #[derive(Debug, Clone, Copy)]
 struct Config {
     pages: usize,
@@ -161,49 +163,67 @@ fn scan_flat_parallel(
     flat_pages: &[u64],
     pages: usize,
     max_distance: usize,
-    workers: usize,
+    budget: ScanExecutionBudget,
 ) -> Result<Vec<usize>, String> {
     let words = validate_flat_layout(signature_bits, query, flat_pages, pages, max_distance)?;
-    if workers == 0 {
-        return Err("workers must be non-zero".to_owned());
-    }
 
-    let worker_count = workers.min(pages);
+    let worker_count = budget.worker_count(pages);
     let shard_pages = pages.div_ceil(worker_count);
     std::thread::scope(|scope| {
         let mut handles = Vec::with_capacity(worker_count);
-        for shard_start_page in (0..pages).step_by(shard_pages) {
+        let mut spawn_failure = None;
+        for (worker_index, shard_start_page) in (0..pages).step_by(shard_pages).enumerate() {
             let shard_end_page = (shard_start_page + shard_pages).min(pages);
-            handles.push(scope.spawn(move || {
-                let mut selected = Vec::new();
-                for page_id in shard_start_page..shard_end_page {
-                    let start = page_id * words;
-                    let page = &flat_pages[start..start + words];
-                    let distance: u32 = query
-                        .iter()
-                        .zip(page.iter())
-                        .map(|(a, b)| (a ^ b).count_ones())
-                        .sum();
-                    if distance as usize <= max_distance {
-                        selected.push(page_id);
+            let handle = std::thread::Builder::new()
+                .name(format!("bkv-flat-scan-{worker_index}"))
+                .spawn_scoped(scope, move || {
+                    let mut selected = Vec::new();
+                    for page_id in shard_start_page..shard_end_page {
+                        let start = page_id * words;
+                        let page = &flat_pages[start..start + words];
+                        let distance: u32 = query
+                            .iter()
+                            .zip(page.iter())
+                            .map(|(a, b)| (a ^ b).count_ones())
+                            .sum();
+                        if distance as usize <= max_distance {
+                            selected.push(page_id);
+                        }
                     }
+                    selected
+                });
+            match handle {
+                Ok(handle) => handles.push(handle),
+                Err(error) => {
+                    spawn_failure = Some((worker_index, error));
+                    break;
                 }
-                selected
-            }));
+            }
         }
 
         let mut merged = Vec::new();
+        let mut worker_panicked = false;
         for handle in handles {
-            let mut local = handle
-                .join()
-                .map_err(|_| "worker thread panicked".to_owned())?;
-            merged.append(&mut local);
+            match handle.join() {
+                Ok(mut local) => merged.append(&mut local),
+                Err(_) => worker_panicked = true,
+            }
+        }
+        if let Some((worker_index, error)) = spawn_failure {
+            return Err(format!(
+                "worker {worker_index} could not be spawned: {error}"
+            ));
+        }
+        if worker_panicked {
+            return Err("worker thread panicked".to_owned());
         }
         Ok::<Vec<usize>, String>(merged)
     })
 }
 
 fn run(config: Config) -> Result<(), String> {
+    let budget = ScanExecutionBudget::new(config.workers, config.workers)
+        .map_err(|error| format!("invalid worker budget: {error:?}"))?;
     let words = config.signature_bits.div_ceil(64);
     let mut state = config.seed;
     let mut query = Vec::with_capacity(words);
@@ -235,7 +255,7 @@ fn run(config: Config) -> Result<(), String> {
         &flat_pages,
         config.pages,
         config.max_distance,
-        config.workers,
+        budget,
     )?;
     if flat != scalar {
         return Err("parallel flat candidate set differs from scalar flat oracle".to_owned());
@@ -248,7 +268,7 @@ fn run(config: Config) -> Result<(), String> {
             &flat_pages,
             config.pages,
             config.max_distance,
-            config.workers,
+            budget,
         )?);
     }
 
@@ -261,7 +281,7 @@ fn run(config: Config) -> Result<(), String> {
             &flat_pages,
             config.pages,
             config.max_distance,
-            config.workers,
+            budget,
         )?;
         black_box(result);
         samples.push(start.elapsed().as_nanos());
@@ -346,8 +366,9 @@ mod tests {
         let flat_pages = flatten(&pages);
         let scalar = scan_flat_scalar(4, &query, &flat_pages, pages.len(), 1).unwrap();
         for workers in [1, 2, 3, 4, 7, 16] {
+            let budget = ScanExecutionBudget::new(workers, workers).unwrap();
             let parallel =
-                scan_flat_parallel(4, &query, &flat_pages, pages.len(), 1, workers).unwrap();
+                scan_flat_parallel(4, &query, &flat_pages, pages.len(), 1, budget).unwrap();
             assert_eq!(parallel, scalar, "worker count {workers}");
         }
     }

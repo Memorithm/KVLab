@@ -5,7 +5,7 @@ use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use kvlab_bkv_scan::{scan_packed_pages, scan_packed_pages_parallel};
+use kvlab_bkv_scan::{scan_packed_pages, scan_packed_pages_parallel, ScanExecutionBudget};
 
 #[derive(Debug, Clone, Copy)]
 struct Config {
@@ -88,6 +88,8 @@ fn median_ns(samples: &mut [u128]) -> u128 {
 }
 
 fn run(config: Config) -> Result<(), String> {
+    let budget = ScanExecutionBudget::new(config.workers, config.workers)
+        .map_err(|error| format!("invalid worker budget: {error:?}"))?;
     let mut state = config.seed;
     let query = make_signature(&mut state, config.signature_bits);
     let pages = (0..config.pages)
@@ -101,7 +103,7 @@ fn run(config: Config) -> Result<(), String> {
         &query,
         &pages,
         config.max_distance,
-        config.workers,
+        budget,
     )
     .map_err(|error| format!("parallel scan failed: {error:?}"))?;
     if scalar != parallel {
@@ -115,7 +117,7 @@ fn run(config: Config) -> Result<(), String> {
                 &query,
                 &pages,
                 config.max_distance,
-                config.workers,
+                budget,
             )
             .map_err(|error| format!("warmup failed: {error:?}"))?,
         );
@@ -129,7 +131,7 @@ fn run(config: Config) -> Result<(), String> {
             &query,
             &pages,
             config.max_distance,
-            config.workers,
+            budget,
         )
         .map_err(|error| format!("timed scan failed: {error:?}"))?;
         black_box(result);
