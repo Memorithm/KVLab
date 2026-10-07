@@ -375,8 +375,6 @@ mod tests {
 
     #[test]
     fn parallel_scan_rejects_zero_workers() {
-        let query = [0_u64];
-        let pages = vec![vec![0_u64]];
         assert_eq!(ScanExecutionBudget::new(0, 1), Err(ScanError::ZeroWorkers));
     }
 
