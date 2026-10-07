@@ -8,10 +8,11 @@
 
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
 use flat_attention::WgpuPagedKvTable;
+use kvlab_bkv_scan::provenance::FLAT_ATTENTION_EXECUTED_REVISION;
 use std::process::ExitCode;
 
-const SCHEMA: &str = "kvlab.eww-k4c-w32-uniform-utilization/v1";
-const FLAT_REVISION: &str = "5c49c1a88198c58390826f8cc1a6539ea52874a4";
+const SCHEMA: &str = "kvlab.eww-k4c-w32-uniform-utilization/v2";
+const CONTRACT_ORIGIN_REVISION: &str = "5c49c1a88198c58390826f8cc1a6539ea52874a4";
 const PAGE_COUNTS: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 const PAGE_SIZE: usize = 16;
 
@@ -45,7 +46,7 @@ fn utilization_basis_points(useful_bytes: usize, encoded_bytes: usize) -> Result
 
 fn run() -> Result<(), String> {
     println!(
-        "schema,flat_revision,page_size,mapped_pages,host_w64_page_map_bytes,useful_device_w32_page_map_bytes,fixed_encoded_uniform_bytes,unused_encoded_uniform_bytes,useful_page_map_basis_points,generation,gpu_status"
+        "schema,contract_origin_revision,executed_dependency_revision,page_size,mapped_pages,host_w64_page_map_bytes,useful_device_w32_page_map_bytes,fixed_encoded_uniform_bytes,unused_encoded_uniform_bytes,useful_page_map_basis_points,generation,gpu_status"
     );
 
     let mut expected_uniform_bytes = None;
@@ -80,7 +81,7 @@ fn run() -> Result<(), String> {
         )?;
 
         println!(
-            "{SCHEMA},{FLAT_REVISION},{PAGE_SIZE},{mapped_pages},{host_w64_page_map_bytes},{useful_device_w32_page_map_bytes},{fixed_encoded_uniform_bytes},{unused_encoded_uniform_bytes},{useful_page_map_basis_points},{},not-executed",
+            "{SCHEMA},{CONTRACT_ORIGIN_REVISION},{FLAT_ATTENTION_EXECUTED_REVISION},{PAGE_SIZE},{mapped_pages},{host_w64_page_map_bytes},{useful_device_w32_page_map_bytes},{fixed_encoded_uniform_bytes},{unused_encoded_uniform_bytes},{useful_page_map_basis_points},{},not-executed",
             projected.generation()
         );
     }

@@ -8,10 +8,11 @@
 
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
 use flat_attention::{WgpuPackedPagedKvTable16, WGSL_PAGED_U16_UNIFORM_U32};
+use kvlab_bkv_scan::provenance::FLAT_ATTENTION_EXECUTED_REVISION;
 use std::process::ExitCode;
 
-const SCHEMA: &str = "kvlab.eww-k4g-u16-shader-contract/v1";
-const FLAT_REVISION: &str = "dff65361cb39b91e88a6d2bc99fc5469187809f4";
+const SCHEMA: &str = "kvlab.eww-k4g-u16-shader-contract/v2";
+const CONTRACT_ORIGIN_REVISION: &str = "dff65361cb39b91e88a6d2bc99fc5469187809f4";
 const HEADER_WORDS: usize = 12;
 const MAX_LOGICAL_PAGES: usize = 256;
 
@@ -90,12 +91,14 @@ fn verify_case(mapped_pages: usize) -> Result<(), String> {
 }
 
 fn run() -> Result<(), String> {
-    println!("schema,flat_revision,cases,max_logical_pages,uniform_words,status");
+    println!(
+        "schema,contract_origin_revision,executed_dependency_revision,cases,max_logical_pages,uniform_words,status"
+    );
     for mapped_pages in 1..=MAX_LOGICAL_PAGES {
         verify_case(mapped_pages)?;
     }
     println!(
-        "{SCHEMA},{FLAT_REVISION},{MAX_LOGICAL_PAGES},{MAX_LOGICAL_PAGES},{WGSL_PAGED_U16_UNIFORM_U32},exact-host-parity"
+        "{SCHEMA},{CONTRACT_ORIGIN_REVISION},{FLAT_ATTENTION_EXECUTED_REVISION},{MAX_LOGICAL_PAGES},{MAX_LOGICAL_PAGES},{WGSL_PAGED_U16_UNIFORM_U32},exact-host-parity"
     );
     Ok(())
 }

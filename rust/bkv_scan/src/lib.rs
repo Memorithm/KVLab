@@ -8,6 +8,7 @@
 //! throughput, scaling, or speedup claim.
 
 pub mod cps2_compact_quality;
+pub mod provenance;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanResult {

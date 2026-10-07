@@ -8,13 +8,14 @@
 //! performance.
 
 use flat_attention::paged_kv::{PagedKvConfig, PagedKvTable};
+use kvlab_bkv_scan::provenance::FLAT_ATTENTION_EXECUTED_REVISION;
 use std::env;
 use std::hint::black_box;
 use std::process::ExitCode;
 use std::time::Instant;
 
-const SCHEMA: &str = "kvlab.eww-k4-flat-production-w64/v1";
-const FLAT_REVISION: &str = "ae61403a4b4b4ed93ea8fa1bb4cd632be9038571";
+const SCHEMA: &str = "kvlab.eww-k4-flat-production-w64/v2";
+const CONTRACT_ORIGIN_REVISION: &str = "ae61403a4b4b4ed93ea8fa1bb4cd632be9038571";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Config {
@@ -211,10 +212,10 @@ fn run(config: Config) -> Result<(), String> {
         time_lane_walk(&table, config.warmup, config.repetitions);
 
     println!(
-        "schema,flat_revision,page_size,physical_pages,live_tokens,mapped_pages,generation,page_map_payload_bytes,epoch_generation_payload_bytes,declared_control_payload_bytes,prior_w128_shadow_payload_bytes,lookup_median_ns,lookup_min_ns,lookup_max_ns,lane_walk_median_ns,lane_walk_min_ns,lane_walk_max_ns,lookup_checksum,lane_checksum,kv_bytes_touched_status,ttft_status,tpot_status,tokens_per_second_status"
+        "schema,contract_origin_revision,executed_dependency_revision,page_size,physical_pages,live_tokens,mapped_pages,generation,page_map_payload_bytes,epoch_generation_payload_bytes,declared_control_payload_bytes,prior_w128_shadow_payload_bytes,lookup_median_ns,lookup_min_ns,lookup_max_ns,lane_walk_median_ns,lane_walk_min_ns,lane_walk_max_ns,lookup_checksum,lane_checksum,kv_bytes_touched_status,ttft_status,tpot_status,tokens_per_second_status"
     );
     println!(
-        "{SCHEMA},{FLAT_REVISION},{},{},{},{mapped_pages},{},{page_map_payload_bytes},{epoch_generation_payload_bytes},{declared_control_payload_bytes},{prior_w128_shadow_payload_bytes},{lookup_median},{lookup_min},{lookup_max},{lane_median},{lane_min},{lane_max},{lookup_checksum},{lane_checksum},not-measured,not-measured,not-measured,not-measured",
+        "{SCHEMA},{CONTRACT_ORIGIN_REVISION},{FLAT_ATTENTION_EXECUTED_REVISION},{},{},{},{mapped_pages},{},{page_map_payload_bytes},{epoch_generation_payload_bytes},{declared_control_payload_bytes},{prior_w128_shadow_payload_bytes},{lookup_median},{lookup_min},{lookup_max},{lane_median},{lane_min},{lane_max},{lookup_checksum},{lane_checksum},not-measured,not-measured,not-measured,not-measured",
         config.page_size,
         config.physical_pages,
         config.live_tokens,
