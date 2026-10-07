@@ -73,8 +73,14 @@ pub struct ScanResult {
 pub enum ScanError {
     ZeroSignatureBits,
     EmptyPages,
-    InvalidWordCount { expected: usize, actual: usize },
-    FlatStorageLengthMismatch { expected: usize, actual: usize },
+    InvalidWordCount {
+        expected: usize,
+        actual: usize,
+    },
+    FlatStorageLengthMismatch {
+        expected: usize,
+        actual: usize,
+    },
     StorageLengthOverflow,
     NonZeroTailBits,
     DistanceOutOfRange,
@@ -88,7 +94,9 @@ pub enum ScanError {
         requested_threads: usize,
         max_threads: usize,
     },
-    WorkerSpawnFailed { worker_index: usize },
+    WorkerSpawnFailed {
+        worker_index: usize,
+    },
     WorkerPanicked,
 }
 
@@ -369,10 +377,7 @@ mod tests {
     fn parallel_scan_rejects_zero_workers() {
         let query = [0_u64];
         let pages = vec![vec![0_u64]];
-        assert_eq!(
-            ScanExecutionBudget::new(0, 1),
-            Err(ScanError::ZeroWorkers)
-        );
+        assert_eq!(ScanExecutionBudget::new(0, 1), Err(ScanError::ZeroWorkers));
     }
 
     #[test]
@@ -513,14 +518,8 @@ mod tests {
 
             for workers in [1_usize, 2, 4, 8] {
                 let budget = ScanExecutionBudget::new(workers, workers).unwrap();
-                let parallel = scan_packed_pages_parallel(
-                    signature_bits,
-                    &query,
-                    &pages,
-                    1,
-                    budget,
-                )
-                .unwrap();
+                let parallel =
+                    scan_packed_pages_parallel(signature_bits, &query, &pages, 1, budget).unwrap();
                 assert_eq!(
                     parallel, scalar,
                     "width {signature_bits}, worker count {workers}"

@@ -204,9 +204,7 @@ fn scan_parallel(
     std::thread::scope(|scope| {
         let mut handles = Vec::with_capacity(worker_count);
         let mut spawn_failure = None;
-        for (worker_index, local_start) in
-            (0..shard_pages).step_by(shard_span).enumerate()
-        {
+        for (worker_index, local_start) in (0..shard_pages).step_by(shard_span).enumerate() {
             let local_end = (local_start + shard_span).min(shard_pages);
             let handle = std::thread::Builder::new()
                 .name(format!("bkv-distinct-scan-{worker_index}"))

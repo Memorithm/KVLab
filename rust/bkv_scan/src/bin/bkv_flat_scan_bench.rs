@@ -172,9 +172,7 @@ fn scan_flat_parallel(
     std::thread::scope(|scope| {
         let mut handles = Vec::with_capacity(worker_count);
         let mut spawn_failure = None;
-        for (worker_index, shard_start_page) in
-            (0..pages).step_by(shard_pages).enumerate()
-        {
+        for (worker_index, shard_start_page) in (0..pages).step_by(shard_pages).enumerate() {
             let shard_end_page = (shard_start_page + shard_pages).min(pages);
             let handle = std::thread::Builder::new()
                 .name(format!("bkv-flat-scan-{worker_index}"))
