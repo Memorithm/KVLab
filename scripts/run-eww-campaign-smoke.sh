@@ -6,9 +6,11 @@ cd "$repo_root"
 
 manifest="rust/bkv_scan/Cargo.toml"
 lockfile="rust/bkv_scan/Cargo.lock"
-evidence_dir="${EWW_EVIDENCE_DIR:-target/eww-evidence}"
-rm -rf "$evidence_dir"
-mkdir -p "$evidence_dir"
+evidence_dir="$(
+  python3 -m kvlab.evidence_directory \
+    --repo-root "$repo_root" \
+    --requested "${EWW_EVIDENCE_DIR:-target/eww-evidence}"
+)"
 test -s "$lockfile"
 cp "$lockfile" "$evidence_dir/Cargo.lock"
 cargo metadata --locked --manifest-path "$manifest" --format-version 1 > "$evidence_dir/cargo-metadata.json"

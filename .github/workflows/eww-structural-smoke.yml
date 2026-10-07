@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'rust/bkv_scan/**'
+      - 'kvlab/evidence_directory.py'
       - 'scripts/run-eww-campaign-smoke.sh'
       - '.github/workflows/eww-structural-smoke.yml'
   workflow_dispatch:
