@@ -1,6 +1,13 @@
 # T430 BKV-K4 distinct socket-local shard evidence — 2026-09-13
 
-Status: **verified hardware evidence for this host and exact commit only**.
+Status: **verified correctness evidence; historical performance values are estimates only**.
+
+> Correction on current HEAD: the v1 campaign proved exact candidate equality,
+> but it did not measure the concurrent pair and deterministic merge on a common
+> timer. Its pair latency was `max(median(shard0), median(shard1))`, which is not
+> the median of paired end-to-end samples. The speedup and derived throughput
+> below are retained for historical traceability but withdrawn as performance
+> qualification. A v2 paired rerun is required.
 
 ## Provenance
 
@@ -38,16 +45,20 @@ The Boolean query is replicated to both NUMA-local shards. Shard 0 owns the firs
 | Monolithic interleaved median | 15,111,998 ns |
 | Shard 0 local median | 10,831,660 ns |
 | Shard 1 local median | 12,133,153 ns |
-| Dual-local pair median | 12,133,153 ns |
-| Speedup vs monolithic interleave | **1.245513×** |
-| Pair latency reduction vs monolithic interleave | **19.71%** |
-| Dual-local pages/s | 2,637,401,836.109707 |
-| Dual-local logical packed-signature GB/s | 84.396859 |
+| Historical estimated pair latency (`max` of independent medians) | 12,133,153 ns |
+| Historical estimated speedup vs monolithic interleave | 1.245513× |
+| Historical estimated latency reduction | 19.71% |
+| Historical estimated pages/s | 2,637,401,836.109707 |
+| Historical estimated logical packed-signature GB/s | 84.396859 |
 | Socket balance | 0.892732 |
 | Selected global pages | 2,283 |
 | Candidate equality | **exact** |
 
-`logical packed-signature GB/s` is a derived traffic metric from page count × packed signature bytes divided by elapsed time. It is **not** a direct DRAM-bandwidth measurement.
+The historical pair value is not a measured paired median because the two shard
+medians were aggregated independently and the merge was not timed. Consequently,
+the speedup, latency reduction and throughput derived from it are estimates only.
+`logical packed-signature GB/s` is additionally a logical traffic calculation,
+not a direct DRAM-bandwidth measurement.
 
 ## Interpretation
 
@@ -55,16 +66,32 @@ For this T430, this campaign validates the BKV-K4 architecture:
 
 `replicated Boolean query -> NUMA0-local BKV shard + NUMA1-local BKV shard -> deterministic candidate merge`
 
-The critical correctness gate passed: the merged global candidate-ID list is exactly identical to the monolithic oracle, while the dual-local pair is 1.245513× faster than the 32-physical-core interleaved monolithic comparator for this 32M-page / 256-bit campaign.
+The critical correctness gate passed: the merged global candidate-ID list is
+exactly identical to the monolithic oracle. This v1 evidence does not establish
+that the dual-local pair is faster than the comparator because it lacks paired
+common-timer samples and merge timing.
 
 This result is consistent with the immediately preceding mirrored-placement gate at commit `46b1d479898eced73c0e26ed0bf6f949b6d81085`, where local placement measured 11.655531 ms, interleave 14.938507 ms, and remote 20.915807 ms with identical candidate counts. The mirrored gate isolated placement; the present gate adds disjoint global page identities and exact merged-candidate equivalence.
 
-## Promoted design rule — scoped
+## Correctness-qualified topology hypothesis
 
-For large Boolean-KV scans on this dual-socket T430, prefer socket-local sharding and replicate the compact Boolean query rather than interleaving a monolithic BKV corpus across NUMA nodes. Candidate results must be merged deterministically before numerical KV consumption.
+Socket-local sharding with a replicated compact Boolean query is a qualified
+correctness-preserving topology to test on this T430. Candidate results must be
+merged deterministically before numerical KV consumption. It is not promoted as
+the faster topology until a clean v2 paired campaign passes.
 
-This rule is **host- and workload-qualified**, not a universal NUMA claim. It must be requalified for other CPUs, page sizes, signature widths, candidate densities, thresholds, and production attention workloads.
+Any later performance result remains host- and workload-specific, not a universal
+NUMA claim, and must be requalified for other CPUs, page sizes, signature widths,
+candidate densities, thresholds, and production attention workloads.
 
 ## Next gate
+
+Rerun `scripts/run_t430_bkv_k4_distinct_shards.sh` from a clean tracked tree.
+The v2 protocol alternates monolithic/dual execution order and shard launch
+order; captures monolithic and dual samples in every repetition; measures both
+concurrent processes plus deterministic merge on one wall clock; verifies exact
+candidate equality every time; retains raw samples; and computes the median only
+from paired end-to-end values. See
+`docs/BKV-K4-DISTINCT-SHARDS-PAIRED-PROTOCOL.md`.
 
 BKV-K5 / BIKV integration should preserve the exact candidate IDs produced by this Boolean plane and use them only to select authoritative numerical K/V pages. Required measurements include Boolean metadata bytes read, numerical KV bytes avoided, selection/merge latency, staging/synchronization cost, TTFT/TPOT, dense-recall/false-negative rate, and downstream numerical output/LSE parity or bounded error as appropriate.
