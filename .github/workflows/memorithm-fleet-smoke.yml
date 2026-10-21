@@ -20,14 +20,14 @@ concurrency:
 
 jobs:
   python:
-    runs-on: [self-hosted, Linux, ARM64, memorithm-ci, thor-general, ci-light, trusted-main]
+    runs-on: [self-hosted, Linux, X64, memorithm-ci, dell-general, ci-light, trusted-main]
     timeout-minutes: 15
     steps:
       - name: Verify non-privileged shared lane
         shell: bash
         run: |
           set -euo pipefail
-          test "$(hostname)" = tarek
+          test "$(hostname)" = debian
           if sudo -n true 2>/dev/null; then exit 71; fi
           for forbidden in sudo wheel docker lxd; do ! id -nG | grep -qw "$forbidden"; done
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -40,14 +40,17 @@ jobs:
         run: python3 -m unittest discover -s tests -v
 
   rust-bkv:
-    runs-on: [self-hosted, Linux, ARM64, memorithm-ci, thor-general, ci-heavy, trusted-main]
+    env:
+      CARGO_BUILD_JOBS: "8"
+      RUST_TEST_THREADS: "8"
+    runs-on: [self-hosted, Linux, X64, memorithm-ci, dell-general, ci-heavy, trusted-main]
     timeout-minutes: 20
     steps:
       - name: Verify non-privileged shared lane
         shell: bash
         run: |
           set -euo pipefail
-          test "$(hostname)" = tarek
+          test "$(hostname)" = debian
           if sudo -n true 2>/dev/null; then exit 71; fi
           for forbidden in sudo wheel docker lxd; do ! id -nG | grep -qw "$forbidden"; done
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
